@@ -1,3 +1,0 @@
-[submodule "DOPPEL-GEN/third_party/stylegan3"]
-	path = DOPPEL-GEN/third_party/stylegan3
-	url = https://github.com/NVlabs/stylegan3.git
