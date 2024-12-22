@@ -1,0 +1,17 @@
+name: DOPPEL-CUDA
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.9  # Specify the Python version you need
+  - pip        # Install pip
+  - click      # For command line interfaces
+  - pillow     # For image processing
+  - scipy      # Common TensorFlow dependency
+  - tensorflow-gpu=2.16.1  # Installs TensorFlow
+  - keras=3.6.0 # Installs Keras
+  - numpy       # Common TensorFlow dependency
+  - matplotlib  # For plotting and visualization
+  - scikit-learn # For additional machine learning tools
+  - wandb
