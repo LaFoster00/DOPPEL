@@ -8,7 +8,7 @@ Tool for generating images of the same person in different conditions
 * 64-bit Python 3.8 (Should be part of the conda environment) and PyTorch 1.9.0 (or later). See https://pytorch.org for PyTorch install instructions.
 * CUDA toolkit 11.1 or later (Should be part of the conda environment).
 * GCC 7 or later (Linux) compilers.  Recommended GCC version depends on CUDA version, see for example [CUDA 11.4 system requirements](https://docs.nvidia.com/cuda/archive/11.4.1/cuda-installation-guide-linux/index.html#system-requirements).
-* Python libraries: see [environment.yml](./environment.yml) for exact library dependencies.  You can use the following commands with Miniconda3 or Anaconda to create and activate your FACE-GAN Python environment:
+* Python libraries: see [generator_environment.yml](./generator_environment.yml) for exact library dependencies.  You can use the following commands with Miniconda3 or Anaconda to create and activate your FACE-GAN Python environment:
   - `conda env create -f generator_environment.yml`
   - `conda activate DOPPEL-GEN`
 
