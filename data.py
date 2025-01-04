@@ -1,8 +1,10 @@
 import os
 import random
+
 from tqdm import tqdm
 import tarfile
 from operator import contains
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 
@@ -19,7 +21,7 @@ def extract_tar(tar_path, extract_dir):
             tar.extractall(path=extract_dir)
 
 # Generate image pairs
-def generate_triplet(class_to_images):
+def generate_triplet(class_to_images, num_classes=-1):
     print("Generating image pairs...")
     anchor = []
     positive = []
@@ -27,9 +29,16 @@ def generate_triplet(class_to_images):
 
     classes = list(class_to_images.keys())
 
+    if num_classes == -1:
+        num_classes = len(classes)
+
+    finished_classes = 0
     for class_name, images in tqdm(class_to_images.items(), desc="Processing classes"):
+        if finished_classes == num_classes:
+            break
+        finished_classes += 1
         # Generate positive pairs
-        if len(images) > 1:
+        if len(images) > 0:
             base_image = random.choice(images)
             for i in range(1, len(images)):
                 anchor.append(base_image)
@@ -65,11 +74,11 @@ def create_tf_dataset(anchor, positive, negative, image_size, batch_size):
     negative_dataset = tf.data.Dataset.from_tensor_slices(negative)
 
     dataset = tf.data.Dataset.zip((anchor_dataset, positive_dataset, negative_dataset))
-    dataset = dataset.shuffle(buffer_size=1024)
+    dataset = dataset.shuffle(buffer_size=2024)
     dataset = dataset.map(
         lambda anchor, positive, negative : load_triplet(anchor, positive, negative, image_size),
         num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size)
+    dataset = dataset.batch(batch_size, drop_remainder=False)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
     return dataset
@@ -78,7 +87,7 @@ def get_dataset_from_slices(anchor, positive, negative, image_size, batch_size):
     return create_tf_dataset(anchor, positive, negative, image_size, batch_size)
 
 # Load data
-def load_data(data_dir, image_size, batch_size):
+def load_data(data_dir, image_size, batch_size, num_classes):
     print(f"Loading data from {data_dir}...")
     extract_tar(data_dir, "data/tmp/VGG-Face2")
     if contains(data_dir, "train.tar"):
@@ -94,33 +103,56 @@ def load_data(data_dir, image_size, batch_size):
             images = [os.path.join(class_path, img) for img in os.listdir(class_path) if img.endswith(".jpg")]
             class_to_images[class_name] = images
 
-    anchor, positive, negative = generate_triplet(class_to_images)
+    anchor, positive, negative = generate_triplet(class_to_images, num_classes)
     return get_dataset_from_slices(anchor, positive, negative, image_size, batch_size)
 
 
 def get_vggface2_data(data_dir="data/VGG-Face2/data",
                       image_size=(224, 224),
                       random_seed=42,
-                      batch_size=32):
+                      batch_size=32,
+                      num_classes=-1):
     # Main script
     train_dataset = load_data(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "train.tar")][0]),
         image_size,
-        batch_size
+        batch_size,
+        num_classes
     )
     test_dataset = load_data(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),
         image_size,
-        batch_size
+        batch_size,
+        num_classes
     )
 
     print("Training and testing datasets are ready for Siamese network training.")
 
     return train_dataset, test_dataset
 
+def visualize(anchor, positive, negative):
+    """Visualize a few triplets from the supplied batches."""
+
+    def show(ax, image):
+        ax.imshow(image)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+    fig = plt.figure(figsize=(9, 9))
+
+    axs = fig.subplots(3, 3)
+    for i in range(3):
+        show(axs[i, 0], anchor[i])
+        show(axs[i, 1], positive[i])
+        show(axs[i, 2], negative[i])
+
+    plt.show()
+
 if __name__ == "__main__":
-    get_vggface2_data()
+    train_dataset, test_dataset = get_vggface2_data(num_classes=-1)
+    visualize(*list(train_dataset.take(1).as_numpy_iterator())[0])
+    print("Done")
