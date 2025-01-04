@@ -15,3 +15,4 @@ dependencies:
   - matplotlib  # For plotting and visualization
   - scikit-learn # For additional machine learning tools
   - wandb
+  - tqdm
