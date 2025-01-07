@@ -14,5 +14,5 @@ dependencies:
   - numpy       # Common TensorFlow dependency
   - matplotlib  # For plotting and visualization
   - scikit-learn # For additional machine learning tools
-  - wandb
+  - wandb=0.19.1 # For logging experiments
   - tqdm

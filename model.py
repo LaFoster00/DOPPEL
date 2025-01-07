@@ -1,3 +1,5 @@
+import csv
+
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -12,15 +14,35 @@ from keras import optimizers
 from keras import metrics
 from keras import Model
 from keras import applications
+import keras
+import sys
+sys.modules["tensorflow.keras"] = keras
+import wandb
+from wandb.integration.keras import WandbMetricsLogger
+from types import SimpleNamespace
 
 import data
 
-target_shape = (200, 200)
+# Convert to SimpleNamespace if needed
+hyperparameters = SimpleNamespace(
+    epochs=10,
+    batch_size=32,
+    image_dim=(224, 224),
+    learning_rate=0.0001,
+    num_train_classes=100,
+    num_test_classes=10
+)
 
-train_dataset, test_dataset = data.get_vggface2_data(image_size = target_shape, num_classes=1000)
+# Save information
+model_save_path = Path("saved_models")
+model_save_path.mkdir(parents=True, exist_ok=True)
+
+train_dataset, test_dataset = data.get_vggface2_data(hyperparameters = hyperparameters,
+                                                     num_train_classes=hyperparameters.num_train_classes,
+                                                     num_test_classes=hyperparameters.num_test_classes)
 
 base_cnn = applications.resnet.ResNet50(
-    weights="imagenet", input_shape=target_shape + (3,), include_top=False
+    weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
 )
 
 flatten = layers.Flatten()(base_cnn.output)
@@ -54,9 +76,9 @@ class DistanceLayer(layers.Layer):
         return (ap_distance, an_distance)
 
 
-anchor_input = layers.Input(name="anchor", shape=target_shape + (3,))
-positive_input = layers.Input(name="positive", shape=target_shape + (3,))
-negative_input = layers.Input(name="negative", shape=target_shape + (3,))
+anchor_input = layers.Input(name="anchor", shape=hyperparameters.image_dim + (3,))
+positive_input = layers.Input(name="positive", shape=hyperparameters.image_dim + (3,))
+negative_input = layers.Input(name="negative", shape=hyperparameters.image_dim + (3,))
 
 distances = DistanceLayer()(
     embedding(applications.resnet.preprocess_input(anchor_input)),
@@ -134,8 +156,36 @@ class SiameseModel(Model):
         return [self.loss_tracker]
 
 siamese_model = SiameseModel(siamese_network)
-siamese_model.compile(optimizer=optimizers.Adam(0.0001))
-siamese_model.fit(train_dataset, epochs=1, validation_data=test_dataset)
+siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate))
+siamese_model.summary(expand_nested=True, show_trainable=True)
+
+model_callbacks = []
+
+try:
+    wandb.init(
+        project="DOPPEL",
+        config={
+            "epochs": hyperparameters.epochs,
+            "batch_size": hyperparameters.batch_size,
+            "learning_rate": hyperparameters.learning_rate,
+            "image_dim": hyperparameters.image_dim,
+        })
+    model_callbacks.append(WandbMetricsLogger())
+except Exception as e:
+    print(f"No wandb callback added. {e}")
+
+history = siamese_model.fit(train_dataset,
+                  epochs=10,
+                  validation_data=test_dataset,
+                  callbacks=model_callbacks)
+
+embedding.save(model_save_path / "DOPPEL_Embedding.keras")
+with open(model_save_path / 'training_history_doppel.csv', mode='w', newline='') as file:
+    writer = csv.writer(file)
+    # Write header
+    writer.writerow(history.history.keys())
+    # Write data
+    writer.writerows(zip(*history.history.values()))
 
 sample = next(iter(train_dataset))
 data.visualize(*sample)

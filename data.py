@@ -1,5 +1,6 @@
 import os
 import random
+from types import SimpleNamespace
 
 from tqdm import tqdm
 import tarfile
@@ -7,6 +8,7 @@ from operator import contains
 import matplotlib.pyplot as plt
 
 import tensorflow as tf
+
 
 def extract_tar(tar_path, extract_dir):
     if contains(tar_path, "train.tar"):
@@ -19,6 +21,7 @@ def extract_tar(tar_path, extract_dir):
         os.makedirs(extract_dir, exist_ok=True)
         with tarfile.open(tar_path, "r:gz") as tar:
             tar.extractall(path=extract_dir)
+
 
 # Generate image pairs
 def generate_triplet(class_to_images, num_classes=-1):
@@ -52,6 +55,7 @@ def generate_triplet(class_to_images, num_classes=-1):
 
     return anchor, positive, negative
 
+
 # Load and preprocess a pair of images lazily
 def load_image(image_path, image_size):
     image = tf.io.read_file(image_path)
@@ -64,8 +68,10 @@ def load_image(image_path, image_size):
     image = image / 255.0  # Normalize to [0, 1]
     return image
 
+
 def load_triplet(anchor, positive, negative, image_size):
     return load_image(anchor, image_size), load_image(positive, image_size), load_image(negative, image_size)
+
 
 # Prepare TensorFlow dataset
 def create_tf_dataset(anchor, positive, negative, image_size, batch_size):
@@ -74,17 +80,19 @@ def create_tf_dataset(anchor, positive, negative, image_size, batch_size):
     negative_dataset = tf.data.Dataset.from_tensor_slices(negative)
 
     dataset = tf.data.Dataset.zip((anchor_dataset, positive_dataset, negative_dataset))
-    dataset = dataset.shuffle(buffer_size=2024)
+    dataset = dataset.shuffle(buffer_size=4096)
     dataset = dataset.map(
-        lambda anchor, positive, negative : load_triplet(anchor, positive, negative, image_size),
+        lambda anchor, positive, negative: load_triplet(anchor, positive, negative, image_size),
         num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=False)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
     return dataset
 
+
 def get_dataset_from_slices(anchor, positive, negative, image_size, batch_size):
     return create_tf_dataset(anchor, positive, negative, image_size, batch_size)
+
 
 # Load data
 def load_data(data_dir, image_size, batch_size, num_classes):
@@ -107,32 +115,32 @@ def load_data(data_dir, image_size, batch_size, num_classes):
     return get_dataset_from_slices(anchor, positive, negative, image_size, batch_size)
 
 
-def get_vggface2_data(data_dir="data/VGG-Face2/data",
-                      image_size=(224, 224),
-                      random_seed=42,
-                      batch_size=32,
-                      num_classes=-1):
+def get_vggface2_data(hyperparameters,
+                      data_dir="data/VGG-Face2/data",
+                      num_train_classes=-1,
+                      num_test_classes=-1):
     # Main script
     train_dataset = load_data(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "train.tar")][0]),
-        image_size,
-        batch_size,
-        num_classes
+        hyperparameters.image_dim,
+        hyperparameters.batch_size,
+        num_train_classes
     )
     test_dataset = load_data(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),
-        image_size,
-        batch_size,
-        num_classes
+        hyperparameters.image_dim,
+        hyperparameters.batch_size,
+        num_test_classes
     )
 
     print("Training and testing datasets are ready for Siamese network training.")
 
     return train_dataset, test_dataset
+
 
 def visualize(anchor, positive, negative):
     """Visualize a few triplets from the supplied batches."""
@@ -152,7 +160,15 @@ def visualize(anchor, positive, negative):
 
     plt.show()
 
+
 if __name__ == "__main__":
-    train_dataset, test_dataset = get_vggface2_data(num_classes=-1)
+    # Convert to SimpleNamespace if needed
+    hyperparameters = SimpleNamespace(
+        epochs=10,
+        batch_size=32,
+        image_dim=(224, 224),
+        learning_rate=0.0003,
+    )
+    train_dataset, test_dataset = get_vggface2_data(hyperparameters, num_train_classes=100, num_test_classes=10)
     visualize(*list(train_dataset.take(1).as_numpy_iterator())[0])
     print("Done")
