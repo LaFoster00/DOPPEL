@@ -29,8 +29,8 @@ hyperparameters = SimpleNamespace(
     batch_size=32,
     image_dim=(224, 224),
     learning_rate=0.0001,
-    num_train_classes=100,
-    num_test_classes=10
+    num_train_classes=1000,
+    num_test_classes=200
 )
 
 # Save information
