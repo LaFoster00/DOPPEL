@@ -21,13 +21,17 @@ def extract_tar(tar_path, extract_dir):
 
 # Lazy image pair generator for contrastive loss
 def pair_generator(class_to_images, image_size):
+    """
+    Generator for creating strictly balanced similar and dissimilar pairs.
+    """
     for class_name, images in class_to_images.items():
         if len(images) > 1:
             for i in range(len(images)):
                 for j in range(i + 1, len(images)):
-                    # Similar pairs (label=0)
+                    # Generate a similar pair (label=0)
                     yield load_image(images[i], image_size), load_image(images[j], image_size), 0
-                    # Dissimilar pairs (label=1)
+                    
+                    # Generate a corresponding dissimilar pair (label=1)
                     random_class = random.choice([cls for cls in class_to_images if cls != class_name])
                     random_image = random.choice(class_to_images[random_class])
                     yield load_image(images[i], image_size), load_image(random_image, image_size), 1
@@ -55,8 +59,29 @@ def create_tf_pair_dataset(generator_fn, image_size, batch_size):
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     return dataset
 
-def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", hyperparameters=None, limit_images=None):
-    """Load the data for contrastive loss efficiently."""
+import os
+
+def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", 
+                                   hyperparameters=None, 
+                                   limit_images=None, 
+                                   num_train_classes=None, 
+                                   num_test_classes=None):
+    """
+    Load the data for contrastive loss efficiently.
+    
+    Parameters:
+        data_dir (str): Directory containing the data.
+        hyperparameters: Hyperparameters for the data loading process.
+        limit_images (int, optional): Maximum number of images to load per class.
+        num_train_classes (int, optional): Number of training classes.
+        num_test_classes (int, optional): Number of test classes.
+        
+    Returns:
+        train_dataset: TensorFlow dataset for training.
+        test_dataset: TensorFlow dataset for testing.
+        num_train_classes: Number of training classes.
+        num_test_classes: Number of test classes.
+    """
     if hyperparameters is None:
         raise ValueError("Hyperparameters must be provided.")
 
@@ -75,7 +100,10 @@ def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", hyperparamete
     test_class_to_images = {}
 
     # Collect images per class for training dataset
-    for class_name in os.listdir(train_data_dir):
+    all_train_classes = os.listdir(train_data_dir)
+    if num_train_classes:
+        all_train_classes = all_train_classes[:num_train_classes]  # Limit to num_train_classes
+    for class_name in all_train_classes:
         class_path = os.path.join(train_data_dir, class_name)
         if os.path.isdir(class_path):
             images = [
@@ -86,7 +114,10 @@ def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", hyperparamete
             train_class_to_images[class_name] = images[:limit_images] if limit_images else images
 
     # Collect images per class for testing dataset
-    for class_name in os.listdir(test_data_dir):
+    all_test_classes = os.listdir(test_data_dir)
+    if num_test_classes:
+        all_test_classes = all_test_classes[:num_test_classes]  # Limit to num_test_classes
+    for class_name in all_test_classes:
         class_path = os.path.join(test_data_dir, class_name)
         if os.path.isdir(class_path):
             images = [
@@ -95,6 +126,10 @@ def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", hyperparamete
                 if img.endswith(".jpg")
             ]
             test_class_to_images[class_name] = images[:limit_images] if limit_images else images
+
+    # Calculate the number of classes
+    num_train_classes = len(train_class_to_images)
+    num_test_classes = len(test_class_to_images)
 
     # Create datasets lazily
     train_dataset = create_tf_pair_dataset(
@@ -109,6 +144,7 @@ def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", hyperparamete
     )
 
     return train_dataset, test_dataset
+
 
 def visualize(dataset):
     """Visualize a few triplets or pairs from the dataset."""
