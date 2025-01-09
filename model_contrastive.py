@@ -12,8 +12,8 @@ hyperparameters = SimpleNamespace(
     batch_size=32,
     image_dim=(224, 224),
     learning_rate=0.0001,
-    num_train_classes=-1,
-    num_test_classes=-1
+    num_train_classes=100,
+    num_test_classes=100
 )
 
 # Prepare model save path
@@ -21,18 +21,15 @@ model_save_path = Path("saved_models")
 model_save_path.mkdir(parents=True, exist_ok=True)
 
 # Load datasets
-train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters)
+train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=10, num_test_classes=20, num_train_classes=100)
 
 # Define base CNN for embeddings
 base_cnn = applications.ResNet50(
     weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
 )
-flatten = layers.Flatten()(base_cnn.output)
-dense1 = layers.Dense(512, activation="relu")(flatten)
-dense1 = layers.BatchNormalization()(dense1)
-dense2 = layers.Dense(256, activation="relu")(dense1)
-dense2 = layers.BatchNormalization()(dense2)
-output = layers.Dense(256)(dense2)
+
+flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
+output = layers.BatchNormalization()(flatten)
 embedding = Model(base_cnn.input, output, name="Embedding")
 
 # Set trainable layers for fine-tuning
@@ -51,7 +48,7 @@ class DistanceLayer(layers.Layer):
 
 # Define Siamese Model
 class SiameseModel(Model):
-    def __init__(self, siamese_network, margin=0.5):
+    def __init__(self, siamese_network, margin=1.0):
         super().__init__()
         self.siamese_network = siamese_network
         self.margin = margin
