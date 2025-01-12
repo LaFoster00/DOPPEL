@@ -5,6 +5,7 @@ from pathlib import Path
 from keras import applications, layers, Model, optimizers, metrics
 from types import SimpleNamespace
 import data
+from math import comb, floor, ceil
 
 # Define hyperparameters
 hyperparameters = SimpleNamespace(
@@ -12,8 +13,22 @@ hyperparameters = SimpleNamespace(
     batch_size=32,
     image_dim=(224, 224),
     learning_rate=0.0001,
-    num_train_classes=100,
+    limit_images=5,
+    num_train_classes=1000,
     num_test_classes=100
+)
+
+num_combinations = comb(hyperparameters.limit_images, 2)
+
+# Calculate steps per epoch
+steps_per_epoch = ceil(
+    (num_combinations * hyperparameters.num_train_classes * 2)
+    / hyperparameters.batch_size
+)
+
+validation_steps = ceil(
+    (num_combinations * hyperparameters.num_test_classes * 2)
+    / hyperparameters.batch_size
 )
 
 # Prepare model save path
@@ -21,7 +36,7 @@ model_save_path = Path("saved_models")
 model_save_path.mkdir(parents=True, exist_ok=True)
 
 # Load datasets
-train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=10, num_test_classes=20, num_train_classes=100)
+train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
 
 # Define base CNN for embeddings
 base_cnn = applications.ResNet50(
@@ -29,7 +44,10 @@ base_cnn = applications.ResNet50(
 )
 
 flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
-output = layers.BatchNormalization()(flatten)
+dense1 = layers.Dense(128, activation='relu')(flatten)
+dropout1 = layers.Dropout(0.5)(dense1)
+dense2 = layers.Dense(64, activation='relu')(dropout1)
+output = layers.BatchNormalization()(dense2)
 embedding = Model(base_cnn.input, output, name="Embedding")
 
 # Set trainable layers for fine-tuning
@@ -98,9 +116,11 @@ siamese_model.summary()
 
 # Train the model
 history = siamese_model.fit(
-    train_dataset,
+    train_dataset.repeat(),
     epochs=hyperparameters.epochs,
-    validation_data=test_dataset
+    validation_data=test_dataset.repeat(),
+    steps_per_epoch = steps_per_epoch,
+    validation_steps = validation_steps
 )
 
 # Save model and training history
