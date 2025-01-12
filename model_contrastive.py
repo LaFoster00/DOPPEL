@@ -10,12 +10,12 @@ from math import comb, floor, ceil
 # Define hyperparameters
 hyperparameters = SimpleNamespace(
     epochs=10,
-    batch_size=32,
+    batch_size=16,
     image_dim=(224, 224),
     learning_rate=0.0001,
     limit_images=5,
-    num_train_classes=1000,
-    num_test_classes=100
+    num_train_classes=800,
+    num_test_classes=200
 )
 
 num_combinations = comb(hyperparameters.limit_images, 2)
