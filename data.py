@@ -28,13 +28,17 @@ def pair_generator(class_to_images, image_size):
         if len(images) > 1:
             for i in range(len(images)):
                 for j in range(i + 1, len(images)):
-                    # Generate a similar pair (label=)
-                    yield load_image(images[i], image_size), load_image(images[j], image_size), 1
+                    # Generate a similar pair (label=1)
+                    image_1 = load_image(images[i], image_size)
+                    image_2 = load_image(images[j], image_size)
+                    yield image_1, image_2, 0
                     
-                    # Generate a corresponding dissimilar pair (label=0)
+                    # Generate a dissimilar pair (label=0)
                     random_class = random.choice([cls for cls in class_to_images if cls != class_name])
                     random_image = random.choice(class_to_images[random_class])
-                    yield load_image(images[i], image_size), load_image(random_image, image_size), 0
+                    image_1 = load_image(images[i], image_size)
+                    image_2 = load_image(random_image, image_size)
+                    yield image_1, image_2, 1
 
 def load_image(image_path, image_size):
     """Load and preprocess an image."""
@@ -51,7 +55,7 @@ def create_tf_pair_dataset(generator_fn, image_size, batch_size):
         output_signature=(
             tf.TensorSpec(shape=(image_size[0], image_size[1], 3), dtype=tf.float32),
             tf.TensorSpec(shape=(image_size[0], image_size[1], 3), dtype=tf.float32),
-            tf.TensorSpec(shape=(), dtype=tf.int32),
+            tf.TensorSpec(shape=(), dtype=tf.int32),  # Labels are integer
         ),
     )
     dataset = dataset.shuffle(buffer_size=1024)  # Adjust for memory constraints
