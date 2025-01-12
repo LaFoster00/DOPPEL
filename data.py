@@ -28,13 +28,13 @@ def pair_generator(class_to_images, image_size):
         if len(images) > 1:
             for i in range(len(images)):
                 for j in range(i + 1, len(images)):
-                    # Generate a similar pair (label=0)
-                    yield load_image(images[i], image_size), load_image(images[j], image_size), 0
+                    # Generate a similar pair (label=)
+                    yield load_image(images[i], image_size), load_image(images[j], image_size), 1
                     
-                    # Generate a corresponding dissimilar pair (label=1)
+                    # Generate a corresponding dissimilar pair (label=0)
                     random_class = random.choice([cls for cls in class_to_images if cls != class_name])
                     random_image = random.choice(class_to_images[random_class])
-                    yield load_image(images[i], image_size), load_image(random_image, image_size), 1
+                    yield load_image(images[i], image_size), load_image(random_image, image_size), 0
 
 def load_image(image_path, image_size):
     """Load and preprocess an image."""
@@ -160,7 +160,7 @@ def visualize(dataset):
         axes[i, 0].set_title(f"Label: {labels[i].numpy()}")
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig('plots/sample.png')
 
 if __name__ == "__main__":
     hyperparameters = SimpleNamespace(
