@@ -58,7 +58,7 @@ def create_tf_pair_dataset(generator_fn, image_size, batch_size):
             tf.TensorSpec(shape=(), dtype=tf.int32),  # Labels are integer
         ),
     )
-    dataset = dataset.shuffle(buffer_size=1024)  # Adjust for memory constraints
+    dataset = dataset.shuffle(buffer_size=128)  # Adjust for memory constraints
     dataset = dataset.batch(batch_size, drop_remainder=False)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     return dataset
