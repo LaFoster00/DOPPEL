@@ -2,17 +2,20 @@ import csv
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from pathlib import Path
-from keras import applications, layers, Model, optimizers, metrics, utils
+from keras import applications, layers, Model, optimizers, metrics, callbacks
 from types import SimpleNamespace
 import data
 from math import comb, floor, ceil
+import wandb
+from wandb.integration.keras import WandbMetricsLogger
 
 # Define hyperparameters
 hyperparameters = SimpleNamespace(
-    epochs=10,
+    epochs=50,
     batch_size=16,
     image_dim=(224, 224),
     learning_rate=0.0001,
+    dropout_rate=0.2,
     limit_images=5,
     num_train_classes=1000,
     num_test_classes=100
@@ -63,7 +66,9 @@ base_cnn = applications.ResNet50(
 )
 
 flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
-output = layers.Dense(1024, activation='relu')(flatten)
+dense1 = layers.Dense(1024, activation='relu')(flatten)
+dropout1 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
+output = layers.Dense(512, activation='relu')(dropout1)
 embedding = Model(base_cnn.input, output, name="Embedding")
 
 embedding_1 = embedding(image_1_input)
@@ -79,13 +84,43 @@ siamese_model = Model(inputs=[image_1_input, image_2_input], outputs=distance, n
 siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate), loss=contrastive_loss, metrics=["accuracy"])
 siamese_model.summary()
 
+# Define callbacks for training
+model_callbacks = [
+    callbacks.EarlyStopping(
+        monitor='val_loss',
+        min_delta=0.0005,  # Reduced min_delta for finer validation loss improvements
+        patience=10,       # Increased patience to allow more epochs before stopping
+        restore_best_weights=True,
+        mode="min"
+    )
+]
+
+# Initialize Weights & Biases tracking if available
+try:
+    wandb.init(
+        project="DOPPEL",
+        config={
+            "epochs": hyperparameters.epochs if hasattr(hyperparameters, 'epochs') else 50,
+            "batch_size": hyperparameters.batch_size if hasattr(hyperparameters, 'batch_size') else 32,
+            "dropout": hyperparameters.dropout_rate if hasattr(hyperparameters, 'dropout_rate') else 0.5,
+            "num_train_classes": hyperparameters.num_train_classes if hasattr(hyperparameters, 'num_train_classes') else 100,
+            "num_val_classes": hyperparameters.num_val_classes if hasattr(hyperparameters, 'num_val_classes') else 20,
+            "input_image_size": hyperparameters.input_image_size if hasattr(hyperparameters, 'input_image_size') else (224, 224),
+            "limit_images": hyperparameters.limit_images,
+            "type":"contrastive"
+        })
+    model_callbacks.append(WandbMetricsLogger())
+except Exception as e:
+    print(f"No wandb callback added. Error: {e}")
+
 # Train the model
 history = siamese_model.fit(
     train_dataset.map(lambda image_1, image_2, label: ((image_1, image_2), label)).repeat(),  # Pack images into tuple for two inputs
     epochs=hyperparameters.epochs,
     validation_data=test_dataset.map(lambda image_1, image_2, label: ((image_1, image_2), label)).repeat(),  # Same for validation
     steps_per_epoch=steps_per_epoch,
-    validation_steps=validation_steps
+    validation_steps=validation_steps,
+    callbacks=model_callbacks
 )
 
 # Save model and training history
