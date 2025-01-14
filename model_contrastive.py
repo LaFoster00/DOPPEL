@@ -2,7 +2,7 @@ import csv
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from pathlib import Path
-from keras import applications, layers, Model, optimizers, metrics, callbacks
+from keras import applications, layers, Model, optimizers, metrics, callbacks, regularizers
 from types import SimpleNamespace
 import data
 from math import comb, floor, ceil
@@ -15,10 +15,12 @@ hyperparameters = SimpleNamespace(
     batch_size=16,
     image_dim=(224, 224),
     learning_rate=0.0001,
-    dropout_rate=0.2,
     limit_images=5,
     num_train_classes=1000,
-    num_test_classes=100
+    num_test_classes=200,
+    trainable_layers=20,
+    dropout_rate = 0.5,
+    margin = 1.0
 )
 
 num_combinations = comb(hyperparameters.limit_images, 2)
@@ -27,12 +29,12 @@ num_combinations = comb(hyperparameters.limit_images, 2)
 steps_per_epoch = ceil(
     (num_combinations * hyperparameters.num_train_classes * 2)
     / hyperparameters.batch_size
-)
+)*2
 
 validation_steps = ceil(
     (num_combinations * hyperparameters.num_test_classes * 2)
     / hyperparameters.batch_size
-)
+)*2
 
 # Prepare model save path
 model_save_path = Path("saved_models")
@@ -47,7 +49,7 @@ def euclidean_distance(vectors):
                                        keepdims=True)
     return tf.keras.backend.sqrt(tf.keras.backend.maximum(sum_squared, tf.keras.backend.epsilon()))
 
-def contrastive_loss(y_true, y_pred, margin=1.0):
+def contrastive_loss(y_true, y_pred, margin=hyperparameters.margin):
 
     squared_distance = tf.square(y_pred)
 
@@ -65,10 +67,26 @@ base_cnn = applications.ResNet50(
     weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
 )
 
+# Make only the last few layers trainable
+trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
+for layer in base_cnn.layers[-trainable_layers:]:
+    layer.trainable = True
+
+
 flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
-dense1 = layers.Dense(1024, activation='relu')(flatten)
-dropout1 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
-output = layers.Dense(512, activation='relu')(dropout1)
+dropout1 = layers.Dropout(hyperparameters.dropout_rate)(flatten)
+# Add L2 regularization
+dense1 = layers.Dense(
+    1024,
+    activation='relu',
+    kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+)(dropout1)
+dropout2 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
+output = layers.Dense(
+    512,
+    activation='relu',
+    kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+)(dropout1)
 embedding = Model(base_cnn.input, output, name="Embedding")
 
 embedding_1 = embedding(image_1_input)
@@ -78,7 +96,7 @@ distance = layers.Lambda(euclidean_distance, name='dist')([embedding_1, embeddin
 
 output = layers.Dense(1, activation='sigmoid')(distance)
 
-siamese_model = Model(inputs=[image_1_input, image_2_input], outputs=distance, name="SiameseNetwork")
+siamese_model = Model(inputs=[image_1_input, image_2_input], outputs=output, name="SiameseNetwork")
 
 # Compile and summarize the model
 siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate), loss=contrastive_loss, metrics=["accuracy"])
@@ -88,10 +106,8 @@ siamese_model.summary()
 model_callbacks = [
     callbacks.EarlyStopping(
         monitor='val_loss',
-        min_delta=0.0005,  # Reduced min_delta for finer validation loss improvements
-        patience=10,       # Increased patience to allow more epochs before stopping
+        patience=5,       # Increased patience to allow more epochs before stopping
         restore_best_weights=True,
-        mode="min"
     )
 ]
 
@@ -107,7 +123,10 @@ try:
             "num_val_classes": hyperparameters.num_val_classes if hasattr(hyperparameters, 'num_val_classes') else 20,
             "input_image_size": hyperparameters.input_image_size if hasattr(hyperparameters, 'input_image_size') else (224, 224),
             "limit_images": hyperparameters.limit_images,
-            "type":"contrastive"
+            "type":"contrastive",
+            "trainable_layers": hyperparameters.trainable_layers,
+            "dropout_rate": hyperparameters.dropout_rate,
+            "margin": hyperparameters.margin
         })
     model_callbacks.append(WandbMetricsLogger())
 except Exception as e:

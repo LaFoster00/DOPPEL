@@ -40,13 +40,21 @@ def pair_generator(class_to_images, image_size):
                     image_2 = load_image(random_image, image_size)
                     yield image_1, image_2, 1
 
-def load_image(image_path, image_size):
-    """Load and preprocess an image."""
+def load_image(image_path, image_size, augment=True):
+    """Load and preprocess an image with optional augmentation."""
     image = tf.io.read_file(image_path)
     image = tf.image.decode_jpeg(image, channels=3)
     image = tf.image.resize(image, image_size)
     image = image / 255.0  # Normalize to [0, 1]
+    
+    if augment:
+        image = tf.image.random_flip_left_right(image)  # Random horizontal flip
+        image = tf.image.random_brightness(image, max_delta=0.2)  # Random brightness adjustment
+        image = tf.image.random_contrast(image, lower=0.8, upper=1.2)  # Random contrast adjustment
+        image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
+    
     return image
+
 
 def create_tf_pair_dataset(generator_fn, image_size, batch_size):
     """Create TensorFlow dataset for contrastive loss using a generator."""
