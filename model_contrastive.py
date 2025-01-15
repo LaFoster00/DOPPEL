@@ -22,8 +22,8 @@ hyperparameters = SimpleNamespace(
     image_dim=(224, 224),
     learning_rate=0.0001,
     limit_images=5,
-    num_train_classes=1000,
-    num_test_classes=200,
+    num_train_classes=5000,
+    num_test_classes=500,
     trainable_layers=20,
     dropout_rate = 0.5,
     margin = 1.0
@@ -69,12 +69,8 @@ def contrastive_loss(y_true, y_pred, margin=hyperparameters.margin):
 
 # Create Siamese Network
 image_1_input = layers.Input(name="image_1", shape=hyperparameters.image_dim + (3,))
-# Preprocess the input using Lambda layer and preprocess_input function
-image_1_input = layers.Lambda(applications.resnet.preprocess_input)(image_1_input)
 
 image_2_input = layers.Input(name="image_2", shape=hyperparameters.image_dim + (3,))
-# Preprocess the input using Lambda layer and preprocess_input function
-image_2_input = layers.Lambda(applications.resnet.preprocess_input)(image_2_input)
 
 # Define base CNN for embeddings
 base_cnn = applications.ResNet50(
@@ -83,7 +79,7 @@ base_cnn = applications.ResNet50(
 
 # Make only the last few layers trainable
 trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
-trainable = False
+trainable = True
 for layer in base_cnn.layers:
     if layer.name == "conv5_block1_out":
         trainable = True

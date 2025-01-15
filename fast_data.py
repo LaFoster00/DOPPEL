@@ -68,7 +68,7 @@ def load_image(image_path, image_size, augment=True):
         lambda: tf.image.decode_jpeg(contents=image, channels=3),
         lambda: tf.image.decode_png(contents=image, channels=3))
     image = tf.image.resize(image, image_size)
-    #image = image / 255.0  # Normalize to [0, 1]
+    image = image / 255.0  # Normalize to [0, 1]
 
     if augment:
         image = tf.image.random_flip_left_right(image)  # Random horizontal flip
@@ -76,7 +76,7 @@ def load_image(image_path, image_size, augment=True):
         image = tf.image.random_contrast(image, lower=0.8, upper=1.2)  # Random contrast adjustment
         image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
 
-    image = tf.clip_by_value(image, 0, 255)
+    image = tf.clip_by_value(image, 0, 1)
     #image = image * 255.0
     #image = image - 127.5
     #image = tf.cast(image, tf.uint8)
@@ -106,13 +106,14 @@ def create_tf_dataset(positive_pairs, negative_pairs, image_size, batch_size):
     shuffled_labels = labels[indices]
 
     # Convert back to Python lists if needed
-    image_paths = shuffled_image_paths.tolist()
-    labels = shuffled_labels.tolist()
+    #image_paths = shuffled_image_paths.tolist()
+    #labels = shuffled_labels.tolist()
 
     image_dataset = tf.data.Dataset.from_tensor_slices(image_paths)
     label_dataset = tf.data.Dataset.from_tensor_slices(labels)
 
     dataset = tf.data.Dataset.zip((image_dataset, label_dataset))
+    dataset = dataset.shuffle(buffer_size=4096)
     dataset = dataset.map(
         lambda paths, flag: load_pair(paths[0], paths[1], flag, image_size),
         num_parallel_calls=tf.data.AUTOTUNE)
