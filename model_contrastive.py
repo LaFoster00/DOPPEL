@@ -8,6 +8,8 @@ from types import SimpleNamespace
 import data
 from math import comb, floor, ceil
 import wandb
+import sys
+sys.modules["tensorflow.keras"] = keras
 from wandb.integration.keras import WandbMetricsLogger
 from keras import saving
 
