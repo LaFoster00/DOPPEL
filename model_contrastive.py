@@ -9,7 +9,7 @@ import data
 from math import comb, floor, ceil
 import wandb
 from wandb.integration.keras import WandbMetricsLogger
-from tensorflow.keras.saving import register_keras_serializable
+from keras import saving
 
 # Define hyperparameters
 hyperparameters = SimpleNamespace(
@@ -45,7 +45,7 @@ model_save_path.mkdir(parents=True, exist_ok=True)
 # Load datasets
 train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
 
-@register_keras_serializable(package='MyPackage')
+@saving.register_keras_serializable(package='MyPackage')
 def euclidean_distance(vectors):
     (a, b) = vectors
     sum_squared = tf.keras.backend.sum(tf.keras.backend.square(a - b), axis=1,
