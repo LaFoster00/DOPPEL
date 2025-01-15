@@ -6,9 +6,11 @@ import keras
 from keras import applications, layers, Model, optimizers, metrics, callbacks, regularizers
 from types import SimpleNamespace
 import data
+import fast_data
 from math import comb, floor, ceil
 import wandb
 import sys
+
 sys.modules["tensorflow.keras"] = keras
 from wandb.integration.keras import WandbMetricsLogger
 from keras import saving
@@ -45,14 +47,15 @@ model_save_path = Path("saved_models")
 model_save_path.mkdir(parents=True, exist_ok=True)
 
 # Load datasets
-train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
+#train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
+train_dataset, test_dataset = fast_data.get_vggface2_data(hyperparameters)
 
 @saving.register_keras_serializable(package='MyPackage')
 def euclidean_distance(vectors):
     (a, b) = vectors
-    sum_squared = tf.keras.backend.sum(tf.keras.backend.square(a - b), axis=1,
+    sum_squared = keras.ops.sum(keras.ops.square(a - b), axis=1,
                                        keepdims=True)
-    return tf.keras.backend.sqrt(tf.keras.backend.maximum(sum_squared, tf.keras.backend.epsilon()))
+    return keras.ops.sqrt(keras.ops.maximum(sum_squared, keras.backend.epsilon()))
 
 def contrastive_loss(y_true, y_pred, margin=hyperparameters.margin):
 

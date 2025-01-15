@@ -172,6 +172,7 @@ def visualize(dataset):
         axes[i, 0].set_title(f"Label: {labels[i].numpy()}")
 
     plt.tight_layout()
+    os.makedirs("plots", exist_ok=True)
     plt.savefig('plots/sample.png')
 
 if __name__ == "__main__":
