@@ -6,6 +6,7 @@ from tqdm import tqdm
 import tarfile
 from operator import contains
 import matplotlib.pyplot as plt
+import numpy as np
 
 import tensorflow as tf
 
@@ -75,6 +76,8 @@ def load_image(image_path, image_size, augment=True):
         image = tf.image.random_contrast(image, lower=0.8, upper=1.2)  # Random contrast adjustment
         image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
 
+    tf.clip_by_value(image, 0, 1)
+
     return image
 
 
@@ -88,13 +91,25 @@ def create_tf_dataset(positive_pairs, negative_pairs, image_size, batch_size):
     image_paths = [(pair[0], pair[1]) for pair in pairs]
     labels = [pair[2] for pair in pairs]
 
+    # Convert to NumPy arrays
+    image_paths = np.array(image_paths)
+    labels = np.array(labels)
+
+    # Generate and store shuffling indices
+    indices = np.random.permutation(len(image_paths))
+
+    # Apply the same indices to shuffle both arrays
+    shuffled_image_paths = image_paths[indices]
+    shuffled_labels = labels[indices]
+
+    # Convert back to Python lists if needed
+    image_paths = shuffled_image_paths.tolist()
+    labels = shuffled_labels.tolist()
+
     image_dataset = tf.data.Dataset.from_tensor_slices(image_paths)
     label_dataset = tf.data.Dataset.from_tensor_slices(labels)
 
     dataset = tf.data.Dataset.zip((image_dataset, label_dataset))
-    dataset = dataset.shuffle(buffer_size=4096)
-    dataset = dataset.shuffle(buffer_size=4096)
-    dataset = dataset.shuffle(buffer_size=4096)
     dataset = dataset.map(
         lambda paths, flag: load_pair(paths[0], paths[1], flag, image_size),
         num_parallel_calls=tf.data.AUTOTUNE)
