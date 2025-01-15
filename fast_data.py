@@ -68,7 +68,7 @@ def load_image(image_path, image_size, augment=True):
         lambda: tf.image.decode_jpeg(contents=image, channels=3),
         lambda: tf.image.decode_png(contents=image, channels=3))
     image = tf.image.resize(image, image_size)
-    image = image / 255.0  # Normalize to [0, 1]
+    #image = image / 255.0  # Normalize to [0, 1]
 
     if augment:
         image = tf.image.random_flip_left_right(image)  # Random horizontal flip
@@ -76,7 +76,10 @@ def load_image(image_path, image_size, augment=True):
         image = tf.image.random_contrast(image, lower=0.8, upper=1.2)  # Random contrast adjustment
         image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
 
-    tf.clip_by_value(image, 0, 1)
+    image = tf.clip_by_value(image, 0, 255)
+    #image = image * 255.0
+    #image = image - 127.5
+    #image = tf.cast(image, tf.uint8)
 
     return image
 

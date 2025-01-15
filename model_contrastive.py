@@ -69,7 +69,12 @@ def contrastive_loss(y_true, y_pred, margin=hyperparameters.margin):
 
 # Create Siamese Network
 image_1_input = layers.Input(name="image_1", shape=hyperparameters.image_dim + (3,))
+# Preprocess the input using Lambda layer and preprocess_input function
+image_1_input = layers.Lambda(applications.resnet.preprocess_input)(image_1_input)
+
 image_2_input = layers.Input(name="image_2", shape=hyperparameters.image_dim + (3,))
+# Preprocess the input using Lambda layer and preprocess_input function
+image_2_input = layers.Lambda(applications.resnet.preprocess_input)(image_2_input)
 
 # Define base CNN for embeddings
 base_cnn = applications.ResNet50(
@@ -78,8 +83,11 @@ base_cnn = applications.ResNet50(
 
 # Make only the last few layers trainable
 trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
-for layer in base_cnn.layers[-trainable_layers:]:
-    layer.trainable = True
+trainable = False
+for layer in base_cnn.layers:
+    if layer.name == "conv5_block1_out":
+        trainable = True
+    layer.trainable = trainable
 
 
 flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
