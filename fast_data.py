@@ -47,7 +47,7 @@ def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
             #for base in range(min(len(images), len(images) if max_images == -1 else max_images)):
             base_image = random.choice(images)
             # Generate multiple
-            for comp in range(min(len(images), len(images) if max_images == -1 else max_images)):
+            for comp in range(1, min(len(images), len(images) if max_images == -1 else max_images)):
                 anchor.append(base_image)
                 comparison.append(images[comp])
                 labels.append(1)
