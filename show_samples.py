@@ -93,29 +93,33 @@ def plot_samples_with_predictions(model, dataset, num_samples, similarity_thresh
 
     anchors, positives, negatives = next(iter(dataset))
 
+    anchor_embeddings, positive_embeddings, negative_embeddings = (
+        model(applications.resnet.preprocess_input(anchors)),
+        model(applications.resnet.preprocess_input(positives)),
+        model(applications.resnet.preprocess_input(negatives)),
+    )
+
+    cosine_similarity = metrics.CosineSimilarity()
+
     for i in range(num_samples):
         anchor, positive, negative = anchors[i], positives[i], negatives[i]
         anchor_images.append(anchor)
         positive_images.append(positive)
         negative_images.append(negative)
 
-        anchor_embedding, positive_embedding, negative_embedding = (
-            model(tf.expand_dims(applications.resnet.preprocess_input(anchor), axis=0)),
-            model(tf.expand_dims(applications.resnet.preprocess_input(positive), axis=0)),
-            model(tf.expand_dims(applications.resnet.preprocess_input(negative), axis=0)),
-        )
+        anchor_embedding = anchor_embeddings[i]
+        positive_embedding = positive_embeddings[i]
+        negative_embedding = negative_embeddings[i]
 
-        cosine_similarity = metrics.CosineSimilarity()
-
-        positive_similarity = cosine_similarity(anchor_embedding, positive_embedding).numpy() > similarity_threshold
+        positive_similarity = cosine_similarity(anchor_embedding, positive_embedding).numpy()
         p_pred.append(positive_similarity)
-        negative_similarity = cosine_similarity(anchor_embedding, negative_embedding).numpy() < similarity_threshold
+        negative_similarity = cosine_similarity(anchor_embedding, negative_embedding).numpy()
         n_pred.append(negative_similarity)
 
     def show(ax, image, name, pred):
         ax.imshow(image)
         ax.axis("off")
-        ax.set_title(f"{name} ({'Similar' if pred else 'Different'})")
+        ax.set_title(f"{name} ({'Similar' if pred > similarity_threshold else 'Different'})")#, {pred:.4f})")
 
     fig = plt.figure(figsize=(3*2, num_samples*2))
 
@@ -159,5 +163,5 @@ if __name__ == "__main__":
     model = load_latest_model(MODEL_PATH)
 
     similarity_threshold = predict_dataset(model, dataset, max_iterations=10)
-    dataset.unbatch().batch(NUM_PAIRS)
+    dataset = dataset.unbatch().batch(NUM_PAIRS)
     plot_samples_with_predictions(model, dataset, NUM_PAIRS, similarity_threshold)
