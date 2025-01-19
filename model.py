@@ -10,6 +10,7 @@ sys.modules["tensorflow.keras"] = keras
 import wandb
 from wandb.integration.keras import WandbMetricsLogger
 from types import SimpleNamespace
+from datetime import datetime
 
 import data
 
@@ -177,8 +178,10 @@ if __name__ == "__main__":
                       validation_data=test_dataset,
                       callbacks=model_callbacks)
 
-    embedding.save(model_save_path / "DOPPEL_Embedding.keras")
-    with open(model_save_path / 'training_history_doppel.csv', mode='w', newline='') as file:
+    # Save model and training history
+    model_name = f"DOPPEL_Triplet_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
+    embedding.save(model_save_path / model_name)
+    with open(model_save_path / f'training_history_{model_name}.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
         # Write header
         writer.writerow(history.history.keys())
