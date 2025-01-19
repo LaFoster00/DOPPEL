@@ -24,7 +24,7 @@ def extract_tar(tar_path, extract_dir):
 
 
 # Generate image pairs
-def generate_triplet(class_to_images, num_classes=-1):
+def generate_triplet(class_to_images, num_classes=-1, max_images=-1):
     print("Generating image pairs...")
     anchor = []
     positive = []
@@ -40,24 +40,30 @@ def generate_triplet(class_to_images, num_classes=-1):
         if finished_classes == num_classes:
             break
         finished_classes += 1
-        # Generate positive pairs
+
+        num_positive_pairs = 0
+        # Generate positive pairs for multiple anchor and comparison images
         if len(images) > 0:
+            # for base in range(min(len(images), len(images) if max_images == -1 else max_images)):
             base_image = random.choice(images)
-            for i in range(1, len(images)):
+            # Generate multiple
+            for comp in range(1, min(len(images), len(images) if max_images == -1 else max_images)):
                 anchor.append(base_image)
-                positive.append(images[i])
+                positive.append(images[comp])
+                num_positive_pairs += 1
 
         # Generate negative pairs
         other_classes = [cls for cls in classes if cls != class_name]
 
-        for i in range(len(images)):
+        # Produce as many negative pairs as positive pairs
+        for i in range(num_positive_pairs):
             negative.append(random.choice(class_to_images[random.choice(other_classes)]))
 
     return anchor, positive, negative
 
 
 # Load and preprocess a pair of images lazily
-def load_image(image_path, image_size):
+def load_image(image_path, image_size, augment=True):
     image = tf.io.read_file(image_path)
     # Decode image
     image = tf.cond(
@@ -66,6 +72,15 @@ def load_image(image_path, image_size):
         lambda: tf.image.decode_png(contents=image, channels=3))
     image = tf.image.resize(image, image_size)
     image = image / 255.0  # Normalize to [0, 1]
+
+    if augment:
+        image = tf.image.random_flip_left_right(image)  # Random horizontal flip
+        image = tf.image.random_brightness(image, max_delta=0.2)  # Random brightness adjustment
+        image = tf.image.random_contrast(image, lower=0.8, upper=1.2)  # Random contrast adjustment
+        image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
+
+    image = tf.clip_by_value(image, 0, 1)
+
     return image
 
 
@@ -80,7 +95,7 @@ def create_tf_dataset(anchor, positive, negative, image_size, batch_size):
     negative_dataset = tf.data.Dataset.from_tensor_slices(negative)
 
     dataset = tf.data.Dataset.zip((anchor_dataset, positive_dataset, negative_dataset))
-    dataset = dataset.shuffle(buffer_size=4096)
+    dataset = dataset.shuffle(buffer_size=1024*8)
     dataset = dataset.map(
         lambda anchor, positive, negative: load_triplet(anchor, positive, negative, image_size),
         num_parallel_calls=tf.data.AUTOTUNE)
@@ -90,12 +105,8 @@ def create_tf_dataset(anchor, positive, negative, image_size, batch_size):
     return dataset
 
 
-def get_dataset_from_slices(anchor, positive, negative, image_size, batch_size):
-    return create_tf_dataset(anchor, positive, negative, image_size, batch_size)
-
-
 # Load data
-def load_data(data_dir, image_size, batch_size, num_classes):
+def load_data(data_dir, image_size, batch_size, num_classes, max_images):
     print(f"Loading data from {data_dir}...")
     extract_tar(data_dir, "data/tmp/VGG-Face2")
     if contains(data_dir, "train.tar"):
@@ -111,14 +122,12 @@ def load_data(data_dir, image_size, batch_size, num_classes):
             images = [os.path.join(class_path, img) for img in os.listdir(class_path) if img.endswith(".jpg")]
             class_to_images[class_name] = images
 
-    anchor, positive, negative = generate_triplet(class_to_images, num_classes)
-    return get_dataset_from_slices(anchor, positive, negative, image_size, batch_size)
+    anchor, positive, negative = generate_triplet(class_to_images, num_classes, max_images)
+    return create_tf_dataset(anchor, positive, negative, image_size, batch_size)
 
 
 def get_vggface2_data(hyperparameters,
-                      data_dir="data/VGG-Face2/data",
-                      num_train_classes=-1,
-                      num_test_classes=-1):
+                      data_dir="data/VGG-Face2/data"):
     # Main script
     train_dataset = load_data(
         os.path.join(
@@ -126,7 +135,8 @@ def get_vggface2_data(hyperparameters,
             [x for x in os.listdir(data_dir) if contains(x, "train.tar")][0]),
         hyperparameters.image_dim,
         hyperparameters.batch_size,
-        num_train_classes
+        hyperparameters.num_train_classes,
+        hyperparameters.limit_images
     )
     test_dataset = load_data(
         os.path.join(
@@ -134,7 +144,8 @@ def get_vggface2_data(hyperparameters,
             [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),
         hyperparameters.image_dim,
         hyperparameters.batch_size,
-        num_test_classes
+        hyperparameters.num_test_classes,
+        hyperparameters.limit_images
     )
 
     print("Training and testing datasets are ready for Siamese network training.")
@@ -162,13 +173,15 @@ def visualize(anchor, positive, negative):
 
 
 if __name__ == "__main__":
-    # Convert to SimpleNamespace if needed
     hyperparameters = SimpleNamespace(
-        epochs=10,
-        batch_size=32,
+        epochs=50,
+        batch_size=16,
         image_dim=(224, 224),
-        learning_rate=0.0003,
+        learning_rate=0.0001,
+        limit_images=5,
+        num_train_classes=1000,
+        num_test_classes=200,
     )
-    train_dataset, test_dataset = get_vggface2_data(hyperparameters, num_train_classes=100, num_test_classes=10)
+    train_dataset, test_dataset = get_vggface2_data(hyperparameters)
     visualize(*list(train_dataset.take(1).as_numpy_iterator())[0])
     print("Done")
