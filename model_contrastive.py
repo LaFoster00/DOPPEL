@@ -22,8 +22,8 @@ hyperparameters = SimpleNamespace(
     image_dim=(224, 224),
     learning_rate=0.0001,
     limit_images=5,
-    num_train_classes=4000,
-    num_test_classes=400,
+    num_train_classes=-1,
+    num_test_classes=-1,
     trainable_layers=20,
     dropout_rate = 0.5,
     margin = 1.0
@@ -169,8 +169,8 @@ if __name__ == "__main__":
     data.visualize(train_dataset)
     image_1, image_2, _ = sample
     embedding_1, embedding_2 = (
-        embedding(applications.resnet.preprocess_input(image_1)),
-        embedding(applications.resnet.preprocess_input(image_2))
+        embedding(image_1),
+        embedding(image_2)
     )
     cosine_similarity = metrics.CosineSimilarity()
     print("Cosine Similarity:", cosine_similarity(embedding_1, embedding_2).numpy())
