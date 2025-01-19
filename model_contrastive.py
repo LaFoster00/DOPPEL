@@ -15,41 +15,6 @@ sys.modules["tensorflow.keras"] = keras
 from wandb.integration.keras import WandbMetricsLogger
 from keras import saving
 
-# Define hyperparameters
-hyperparameters = SimpleNamespace(
-    epochs=50,
-    batch_size=16,
-    image_dim=(224, 224),
-    learning_rate=0.0001,
-    limit_images=5,
-    num_train_classes=-1,
-    num_test_classes=-1,
-    trainable_layers=20,
-    dropout_rate = 0.5,
-    margin = 1.0
-)
-
-num_combinations = comb(hyperparameters.limit_images, 2)
-
-# Calculate steps per epoch
-steps_per_epoch = ceil(
-    (num_combinations * hyperparameters.num_train_classes * 2)
-    / hyperparameters.batch_size
-)*2
-
-validation_steps = ceil(
-    (num_combinations * hyperparameters.num_test_classes * 2)
-    / hyperparameters.batch_size
-)*2
-
-# Prepare model save path
-model_save_path = Path("saved_models")
-model_save_path.mkdir(parents=True, exist_ok=True)
-
-# Load datasets
-#train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
-train_dataset, test_dataset = fast_data.get_vggface2_data(hyperparameters)
-
 @saving.register_keras_serializable(package='MyPackage')
 def euclidean_distance(vectors):
     (a, b) = vectors
@@ -57,74 +22,108 @@ def euclidean_distance(vectors):
                                        keepdims=True)
     return keras.ops.sqrt(keras.ops.maximum(sum_squared, keras.backend.epsilon()))
 
-def contrastive_loss(y_true, y_pred, margin=hyperparameters.margin):
-
-    squared_distance = tf.square(y_pred)
-
-    # Compute contrastive loss
-    loss = (1 - y_true) * 0.5 * squared_distance + y_true * 0.5 * tf.maximum(0.0, margin - y_pred) ** 2
-
-    return tf.reduce_mean(loss)
-
-
-# Create Siamese Network
-image_1_input = layers.Input(name="image_1", shape=hyperparameters.image_dim + (3,))
-
-image_2_input = layers.Input(name="image_2", shape=hyperparameters.image_dim + (3,))
-
-# Define base CNN for embeddings
-base_cnn = applications.ResNet50(
-    weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
-)
-
-# Make only the last few layers trainable
-trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
-trainable = False
-for layer in base_cnn.layers:
-    if layer.name == "conv5_block1_out":
-        trainable = True
-    layer.trainable = trainable
-
-
-flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
-dropout1 = layers.Dropout(hyperparameters.dropout_rate)(flatten)
-# Add L2 regularization
-dense1 = layers.Dense(
-    1024,
-    activation='relu',
-    kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
-)(dropout1)
-dropout2 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
-output = layers.Dense(
-    512,
-    activation='relu',
-    kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
-)(dropout1)
-embedding = Model(base_cnn.input, output, name="Embedding")
-
-embedding_1 = embedding(image_1_input)
-embedding_2 = embedding(image_2_input)
-
-distance = layers.Lambda(euclidean_distance, name='dist', output_shape=(1,))([embedding_1, embedding_2])
-
-output = layers.Dense(1, activation='sigmoid')(distance)
-
-siamese_model = Model(inputs=[image_1_input, image_2_input], outputs=output, name="SiameseNetwork")
-
-# Compile and summarize the model
-siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate), loss=contrastive_loss, metrics=["accuracy"])
-siamese_model.summary()
-
-# Define callbacks for training
-model_callbacks = [
-    callbacks.EarlyStopping(
-        monitor='val_loss',
-        patience=5,       # Increased patience to allow more epochs before stopping
-        restore_best_weights=True,
-    )
-]
+def  get_contrastive_loss(margin):
+    def contrastive_loss(y_true, y_pred):
+        squared_distance = tf.square(y_pred)
+        # Compute contrastive loss
+        loss = (1 - y_true) * 0.5 * squared_distance + y_true * 0.5 * tf.maximum(0.0, margin - y_pred) ** 2
+        return tf.reduce_mean(loss)
+    return contrastive_loss
 
 if __name__ == "__main__":
+    # Define hyperparameters
+    hyperparameters = SimpleNamespace(
+        epochs=50,
+        batch_size=16,
+        image_dim=(224, 224),
+        learning_rate=0.0001,
+        limit_images=5,
+        num_train_classes=-1,
+        num_test_classes=-1,
+        trainable_layers=20,
+        dropout_rate = 0.5,
+        margin = 1.0
+    )
+
+
+
+    num_combinations = comb(hyperparameters.limit_images, 2)
+
+    # Calculate steps per epoch
+    steps_per_epoch = ceil(
+        (num_combinations * hyperparameters.num_train_classes * 2)
+        / hyperparameters.batch_size
+    )*2
+
+    validation_steps = ceil(
+        (num_combinations * hyperparameters.num_test_classes * 2)
+        / hyperparameters.batch_size
+    )*2
+
+    # Prepare model save path
+    model_save_path = Path("saved_models")
+    model_save_path.mkdir(parents=True, exist_ok=True)
+
+    # Load datasets
+    #train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
+    train_dataset, test_dataset = fast_data.get_vggface2_data(hyperparameters)
+
+    # Create Siamese Network
+    image_1_input = layers.Input(name="image_1", shape=hyperparameters.image_dim + (3,))
+
+    image_2_input = layers.Input(name="image_2", shape=hyperparameters.image_dim + (3,))
+
+    # Define base CNN for embeddings
+    base_cnn = applications.ResNet50(
+        weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
+    )
+
+    # Make only the last few layers trainable
+    trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
+    trainable = False
+    for layer in base_cnn.layers:
+        if layer.name == "conv5_block1_out":
+            trainable = True
+        layer.trainable = trainable
+
+
+    flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
+    dropout1 = layers.Dropout(hyperparameters.dropout_rate)(flatten)
+    # Add L2 regularization
+    dense1 = layers.Dense(
+        1024,
+        activation='relu',
+        kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+    )(dropout1)
+    dropout2 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
+    output = layers.Dense(
+        512,
+        activation='relu',
+        kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+    )(dropout1)
+    embedding = Model(base_cnn.input, output, name="Embedding")
+
+    embedding_1 = embedding(image_1_input)
+    embedding_2 = embedding(image_2_input)
+
+    distance = layers.Lambda(euclidean_distance, name='dist', output_shape=(1,))([embedding_1, embedding_2])
+
+    output = layers.Dense(1, activation='sigmoid')(distance)
+
+    siamese_model = Model(inputs=[image_1_input, image_2_input], outputs=output, name="SiameseNetwork")
+
+    # Compile and summarize the model
+    siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate), loss=get_contrastive_loss(hyperparameters.margin), metrics=["accuracy"])
+    siamese_model.summary()
+
+    # Define callbacks for training
+    model_callbacks = [
+        callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=5,       # Increased patience to allow more epochs before stopping
+            restore_best_weights=True,
+        )
+    ]
 
 
     # Initialize Weights & Biases tracking if available

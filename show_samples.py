@@ -2,8 +2,8 @@ import os
 import random
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from tensorflow.keras.models import load_model
-from model_contrastive import euclidean_distance, contrastive_loss
+from keras import models
+from model_contrastive import euclidean_distance, get_contrastive_loss
 
 
 def load_data(data_dir, image_size=(224, 224), num_pairs=5):
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     # Load the Siamese model
     if os.path.exists(MODEL_PATH):
         print(f"Loading model from {MODEL_PATH}...")
-        siamese_model = load_model(MODEL_PATH, custom_objects={"contrastive_loss": contrastive_loss})
+        siamese_model = models.load_model(MODEL_PATH, custom_objects={"contrastive_loss": get_contrastive_loss(1.0)})
     else:
         raise FileNotFoundError(f"Model not found at {MODEL_PATH}. Ensure the model is trained and saved.")
 

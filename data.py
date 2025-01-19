@@ -161,7 +161,7 @@ def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data",
 def visualize(dataset):
     """Visualize a few triplets or pairs from the dataset."""
     sample = next(iter(dataset.take(1)))
-    image_1, image_2, labels = sample
+    (image_1, image_2), labels = sample
 
     fig, axes = plt.subplots(3, 2, figsize=(6, 9))
     for i in range(3):
