@@ -109,8 +109,8 @@ if __name__ == "__main__":
     # Parameters
     DATA_DIR = "data/tmp/VGG-Face2/test"
     IMAGE_SIZE = (224, 224)
-    NUM_PAIRS = 8  # This now determines the total number of pairs to generate and plot
-    MODEL_PATH = "saved_models/DOPPEL_1024.keras"
+    NUM_PAIRS = 4  # This now determines the total number of pairs to generate and plot
+    MODEL_PATH = "saved_models/best.keras"
 
     # Load data
     print("Loading data...")
