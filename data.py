@@ -70,8 +70,8 @@ def load_image(image_path, image_size, augment=True):
         tf.image.is_jpeg(image),
         lambda: tf.image.decode_jpeg(contents=image, channels=3),
         lambda: tf.image.decode_png(contents=image, channels=3))
+    image = tf.image.convert_image_dtype(image, tf.float32)
     image = tf.image.resize(image, image_size)
-    image = image / 255.0  # Normalize to [0, 1]
 
     if augment:
         image = tf.image.random_flip_left_right(image)  # Random horizontal flip
