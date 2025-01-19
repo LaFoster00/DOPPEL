@@ -4,7 +4,26 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import models
 from model_contrastive import euclidean_distance, get_contrastive_loss
+from datetime import datetime
 
+def load_latest_model(model_dir):
+    """
+    Load the latest model from the specified directory based on the naming convention.
+
+    Parameters:
+        model_dir (str): Directory containing the saved models.
+
+    Returns:
+        model: The latest loaded model.
+    """
+    model_files = [f for f in os.listdir(model_dir) if f.startswith("DOPPEL_Contrastive_Embedding_") and f.endswith(".keras")]
+    if not model_files:
+        raise FileNotFoundError(f"No model files found in {model_dir}. Ensure the models are saved with the correct naming convention.")
+
+    latest_model_file = max(model_files, key=lambda f: datetime.strptime(f.split('_')[2], '%Y%m%d_%H%M%S'))
+    latest_model_path = os.path.join(model_dir, latest_model_file)
+    print(f"Loading model from {latest_model_path}...")
+    return models.load_model(latest_model_path, custom_objects={"contrastive_loss": get_contrastive_loss(1.0)})
 
 def load_data(data_dir, image_size=(224, 224), num_pairs=5):
     """
@@ -111,6 +130,9 @@ if __name__ == "__main__":
     IMAGE_SIZE = (224, 224)
     NUM_PAIRS = 4  # This now determines the total number of pairs to generate and plot
     MODEL_PATH = "saved_models/best.keras"
+
+    if os.path.isdir(MODEL_PATH):
+        MODEL_PATH = load_latest_model(MODEL_PATH)
 
     # Load data
     print("Loading data...")

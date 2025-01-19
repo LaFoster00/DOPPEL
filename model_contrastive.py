@@ -10,6 +10,7 @@ import fast_data
 from math import comb, floor, ceil
 import wandb
 import sys
+from datetime import datetime
 
 sys.modules["tensorflow.keras"] = keras
 from wandb.integration.keras import WandbMetricsLogger
@@ -142,7 +143,8 @@ if __name__ == "__main__":
     )
 
     # Save model and training history
-    siamese_model.save(model_save_path / "DOPPEL_Embedding.keras")
+    model_name = f"DOPPEL_Contrastive_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
+    siamese_model.save(model_save_path / model_name)
     with open(model_save_path / 'training_history_doppel.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(history.history.keys())
