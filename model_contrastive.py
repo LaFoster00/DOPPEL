@@ -13,15 +13,14 @@ from tensorflow.keras.saving import register_keras_serializable
 
 # Define hyperparameters
 hyperparameters = SimpleNamespace(
-    epochs=50,
+    epochs=6,
     batch_size=16,
     image_dim=(224, 224),
     learning_rate=0.0001,
     limit_images=5,
-    num_train_classes=1000,
+    num_train_classes=1500,
     num_test_classes=200,
     trainable_layers=20,
-    dropout_rate = 0.5,
     margin = 1.0
 )
 
@@ -31,12 +30,12 @@ num_combinations = comb(hyperparameters.limit_images, 2)
 steps_per_epoch = ceil(
     (num_combinations * hyperparameters.num_train_classes * 2)
     / hyperparameters.batch_size
-)*2
+)
 
 validation_steps = ceil(
     (num_combinations * hyperparameters.num_test_classes * 2)
     / hyperparameters.batch_size
-)*2
+)
 
 # Prepare model save path
 model_save_path = Path("saved_models")
@@ -78,19 +77,17 @@ for layer in base_cnn.layers[-trainable_layers:]:
 
 
 flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
-dropout1 = layers.Dropout(hyperparameters.dropout_rate)(flatten)
 # Add L2 regularization
 dense1 = layers.Dense(
+    2048,
+    activation='relu',
+    kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+)(flatten)
+output = layers.Dense(
     1024,
     activation='relu',
     kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
-)(dropout1)
-dropout2 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
-output = layers.Dense(
-    512,
-    activation='relu',
-    kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
-)(dropout1)
+)(dense1)
 embedding = Model(base_cnn.input, output, name="Embedding")
 
 embedding_1 = embedding(image_1_input)
@@ -125,14 +122,12 @@ if __name__ == "__main__":
             config={
                 "epochs": hyperparameters.epochs if hasattr(hyperparameters, 'epochs') else 50,
                 "batch_size": hyperparameters.batch_size if hasattr(hyperparameters, 'batch_size') else 32,
-                "dropout": hyperparameters.dropout_rate if hasattr(hyperparameters, 'dropout_rate') else 0.5,
                 "num_train_classes": hyperparameters.num_train_classes if hasattr(hyperparameters, 'num_train_classes') else 100,
                 "num_val_classes": hyperparameters.num_val_classes if hasattr(hyperparameters, 'num_val_classes') else 20,
                 "input_image_size": hyperparameters.input_image_size if hasattr(hyperparameters, 'input_image_size') else (224, 224),
                 "limit_images": hyperparameters.limit_images,
                 "type":"contrastive",
                 "trainable_layers": hyperparameters.trainable_layers,
-                "dropout_rate": hyperparameters.dropout_rate,
                 "margin": hyperparameters.margin
             })
         model_callbacks.append(WandbMetricsLogger())
