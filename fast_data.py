@@ -23,12 +23,12 @@ def extract_tar(tar_path, extract_dir):
         with tarfile.open(tar_path, "r:gz") as tar:
             tar.extractall(path=extract_dir)
 
-
 # Generate image pairs
 def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
     print("Generating image pairs...")
-    positive_pairs = []
-    negative_pairs = []
+    anchor = []
+    comparison = []
+    labels = []
 
     classes = list(class_to_images.keys())
 
@@ -42,21 +42,27 @@ def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
         finished_classes += 1
 
         num_positive_pairs = 0
-        # Generate positive pairs
+        # Generate positive pairs for multiple anchor and comparison images
         if len(images) > 0:
+            #for base in range(min(len(images), len(images) if max_images == -1 else max_images)):
             base_image = random.choice(images)
-            for i in range(1, min(len(images), len(images) if max_images == -1 else max_images)):
-                positive_pairs.append((base_image, images[i], 1))
+            # Generate multiple
+            for comp in range(min(len(images), len(images) if max_images == -1 else max_images)):
+                anchor.append(base_image)
+                comparison.append(images[comp])
+                labels.append(1)
                 num_positive_pairs += 1
 
         # Generate negative pairs
         other_classes = [cls for cls in classes if cls != class_name]
 
+        # Produce as many negative pairs as positive pairs
         for i in range(num_positive_pairs):
-            base_image = random.choice(images)
-            negative_pairs.append((base_image, random.choice(class_to_images[random.choice(other_classes)]), 0))
+            anchor.append(anchor[-num_positive_pairs + i])
+            comparison.append(random.choice(class_to_images[random.choice(other_classes)]))
+            labels.append(0)
 
-    return positive_pairs, negative_pairs
+    return anchor, comparison, labels
 
 
 # Load and preprocess a pair of images lazily
@@ -77,45 +83,27 @@ def load_image(image_path, image_size, augment=True):
         image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
 
     image = tf.clip_by_value(image, 0, 1)
-    #image = image * 255.0
-    #image = image - 127.5
-    #image = tf.cast(image, tf.uint8)
+    # image = image * 255.0
+    # image = image - 127.5
+    # image = tf.cast(image, tf.uint8)
 
     return image
 
 
 def load_pair(base, comp, flag, image_size):
-    return load_image(base, image_size), load_image(comp, image_size), flag
+    return (load_image(base, image_size), load_image(comp, image_size)), flag
 
 
 # Prepare TensorFlow dataset
-def create_tf_dataset(positive_pairs, negative_pairs, image_size, batch_size):
-    pairs = positive_pairs + negative_pairs
-    image_paths = [(pair[0], pair[1]) for pair in pairs]
-    labels = [pair[2] for pair in pairs]
-
-    # Convert to NumPy arrays
-    image_paths = np.array(image_paths)
-    labels = np.array(labels)
-
-    # Generate and store shuffling indices
-    indices = np.random.permutation(len(image_paths))
-
-    # Apply the same indices to shuffle both arrays
-    shuffled_image_paths = image_paths[indices]
-    shuffled_labels = labels[indices]
-
-    # Convert back to Python lists if needed
-    #image_paths = shuffled_image_paths.tolist()
-    #labels = shuffled_labels.tolist()
-
-    image_dataset = tf.data.Dataset.from_tensor_slices(image_paths)
+def create_tf_dataset(anchor, comparison, labels, image_size, batch_size):
+    anchor_dataset = tf.data.Dataset.from_tensor_slices(anchor)
+    comparison_dataset = tf.data.Dataset.from_tensor_slices(comparison)
     label_dataset = tf.data.Dataset.from_tensor_slices(labels)
 
-    dataset = tf.data.Dataset.zip((image_dataset, label_dataset))
-    dataset = dataset.shuffle(buffer_size=4096)
+    dataset = tf.data.Dataset.zip((anchor_dataset, comparison_dataset, label_dataset))
+    dataset = dataset.shuffle(buffer_size=1024 * 8)
     dataset = dataset.map(
-        lambda paths, flag: load_pair(paths[0], paths[1], flag, image_size),
+        lambda anchor_path, comparison_path, flag: load_pair(anchor_path, comparison_path, flag, image_size),
         num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=False)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
@@ -140,10 +128,8 @@ def load_data(data_dir, image_size, batch_size, num_classes, max_images):
             images = [os.path.join(class_path, img) for img in os.listdir(class_path) if img.endswith(".jpg")]
             class_to_images[class_name] = images
 
-
-
-    positive_pairs, negative_pairs = generate_pairs(class_to_images, num_classes, max_images)
-    return create_tf_dataset(positive_pairs, negative_pairs, image_size, batch_size)
+    anchor_images, comparison_images, labels = generate_pairs(class_to_images, num_classes, max_images)
+    return create_tf_dataset(anchor_images, comparison_images, labels, image_size, batch_size)
 
 
 def get_vggface2_data(hyperparameters,
@@ -176,7 +162,7 @@ def get_vggface2_data(hyperparameters,
 def visualize(dataset):
     """Visualize a few triplets or pairs from the dataset."""
     sample = next(iter(dataset.take(1)))
-    image_1, image_2, labels = sample
+    (image_1, image_2), labels = sample
 
     fig, axes = plt.subplots(3, 2, figsize=(6, 9))
     for i in range(3):

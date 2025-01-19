@@ -22,8 +22,8 @@ hyperparameters = SimpleNamespace(
     image_dim=(224, 224),
     learning_rate=0.0001,
     limit_images=5,
-    num_train_classes=5000,
-    num_test_classes=500,
+    num_train_classes=4000,
+    num_test_classes=400,
     trainable_layers=20,
     dropout_rate = 0.5,
     margin = 1.0
@@ -79,7 +79,7 @@ base_cnn = applications.ResNet50(
 
 # Make only the last few layers trainable
 trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
-trainable = True
+trainable = False
 for layer in base_cnn.layers:
     if layer.name == "conv5_block1_out":
         trainable = True
@@ -151,11 +151,9 @@ if __name__ == "__main__":
 
     # Train the model
     history = siamese_model.fit(
-        train_dataset.map(lambda image_1, image_2, label: ((image_1, image_2), label)).repeat(),  # Pack images into tuple for two inputs
+        train_dataset,
         epochs=hyperparameters.epochs,
-        validation_data=test_dataset.map(lambda image_1, image_2, label: ((image_1, image_2), label)).repeat(),  # Same for validation
-        steps_per_epoch=steps_per_epoch,
-        validation_steps=validation_steps,
+        validation_data=test_dataset,
         callbacks=model_callbacks
     )
 
