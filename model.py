@@ -156,10 +156,11 @@ if __name__ == "__main__":
         restore_best_weights=True,
     )]
 
-
+    model_name = f"DOPPEL_Triplet_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
     try:
         wandb.init(
             project="DOPPEL",
+            name=model_name,
             config={
                 "type": "tiplet",
                 "epochs": hyperparameters.epochs,
@@ -180,7 +181,6 @@ if __name__ == "__main__":
                       callbacks=model_callbacks)
 
     # Save model and training history
-    model_name = f"DOPPEL_Triplet_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
     embedding.save(model_save_path / model_name)
     with open(model_save_path / f'training_history_{model_name}.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
