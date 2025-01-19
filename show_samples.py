@@ -11,19 +11,21 @@ def load_latest_model(model_dir):
     Load the latest model from the specified directory based on the naming convention.
 
     Parameters:
-        model_dir (str): Directory containing the saved models.
+        model_dir (str): Directory containing the saved models or the specific model to load.
 
     Returns:
         model: The latest loaded model.
     """
-    model_files = [f for f in os.listdir(model_dir) if f.startswith("DOPPEL_Contrastive_Embedding_") and f.endswith(".keras")]
-    if not model_files:
-        raise FileNotFoundError(f"No model files found in {model_dir}. Ensure the models are saved with the correct naming convention.")
+    if os.path.isdir(model_dir):
+        model_files = [f for f in os.listdir(model_dir) if f.startswith("DOPPEL_Contrastive_Embedding_") and f.endswith(".keras")]
+        if not model_files:
+            raise FileNotFoundError(f"No model files found in {model_dir}. Ensure the models are saved with the correct naming convention.")
 
-    latest_model_file = max(model_files, key=lambda f: datetime.strptime(f.split('_')[2], '%Y%m%d_%H%M%S'))
-    latest_model_path = os.path.join(model_dir, latest_model_file)
-    print(f"Loading model from {latest_model_path}...")
-    return models.load_model(latest_model_path, custom_objects={"contrastive_loss": get_contrastive_loss(1.0)})
+        latest_model_file = max(model_files, key=lambda f: datetime.strptime(f.split('_')[3] + '_' + f.split('_')[4].split('.')[0], '%Y%m%d_%H%M%S'))
+        model_dir = os.path.join(model_dir, latest_model_file)
+
+    print(f"Loading model from {model_dir}...")
+    return models.load_model(model_dir, custom_objects={"contrastive_loss": get_contrastive_loss(1.0)})
 
 def load_data(data_dir, image_size=(224, 224), num_pairs=5):
     """
@@ -129,10 +131,7 @@ if __name__ == "__main__":
     DATA_DIR = "data/tmp/VGG-Face2/test"
     IMAGE_SIZE = (224, 224)
     NUM_PAIRS = 4  # This now determines the total number of pairs to generate and plot
-    MODEL_PATH = "saved_models/best.keras"
-
-    if os.path.isdir(MODEL_PATH):
-        MODEL_PATH = load_latest_model(MODEL_PATH)
+    MODEL_PATH = "saved_models"
 
     # Load data
     print("Loading data...")
@@ -142,7 +141,7 @@ if __name__ == "__main__":
     # Load the Siamese model
     if os.path.exists(MODEL_PATH):
         print(f"Loading model from {MODEL_PATH}...")
-        siamese_model = models.load_model(MODEL_PATH, custom_objects={"contrastive_loss": get_contrastive_loss(1.0)})
+        siamese_model = load_latest_model(MODEL_PATH)
     else:
         raise FileNotFoundError(f"Model not found at {MODEL_PATH}. Ensure the model is trained and saved.")
 
