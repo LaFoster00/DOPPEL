@@ -11,6 +11,7 @@ import wandb
 from wandb.integration.keras import WandbMetricsLogger
 from types import SimpleNamespace
 from datetime import datetime
+from show_samples import predict_dataset
 
 import data
 
@@ -188,8 +189,13 @@ if __name__ == "__main__":
         # Write data
         writer.writerows(zip(*history.history.values()))
 
+    train_dataset : tf.data.Dataset = train_dataset
+
+    similarity_threshold = predict_dataset(embedding, train_dataset)
+
     sample = next(iter(train_dataset))
     data.visualize(*sample)
+
 
     anchor, positive, negative = sample
     anchor_embedding, positive_embedding, negative_embedding = (
@@ -205,3 +211,4 @@ if __name__ == "__main__":
 
     negative_similarity = cosine_similarity(anchor_embedding, negative_embedding)
     print("Negative similarity", negative_similarity.numpy())
+
