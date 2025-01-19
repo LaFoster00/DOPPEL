@@ -34,10 +34,10 @@ if __name__ == "__main__":
     # Define hyperparameters
     hyperparameters = SimpleNamespace(
         epochs=50,
-        batch_size=16,
+        batch_size=32,
         image_dim=(224, 224),
         learning_rate=0.0001,
-        limit_images=-1,
+        limit_images=15,
         num_train_classes=-1,
         num_test_classes=-1,
         trainable_layers=20,
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     # Evaluate and visualize results
     sample = next(iter(train_dataset))
     data.visualize(train_dataset)
-    image_1, image_2, _ = sample
+    (image_1, image_2), _ = sample
     embedding_1, embedding_2 = (
         embedding(image_1),
         embedding(image_2)
