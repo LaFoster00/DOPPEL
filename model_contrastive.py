@@ -37,28 +37,13 @@ if __name__ == "__main__":
         batch_size=16,
         image_dim=(224, 224),
         learning_rate=0.0001,
-        limit_images=5,
+        limit_images=-1,
         num_train_classes=-1,
         num_test_classes=-1,
         trainable_layers=20,
         dropout_rate = 0.5,
         margin = 1.0
     )
-
-
-
-    num_combinations = comb(hyperparameters.limit_images, 2)
-
-    # Calculate steps per epoch
-    steps_per_epoch = ceil(
-        (num_combinations * hyperparameters.num_train_classes * 2)
-        / hyperparameters.batch_size
-    )*2
-
-    validation_steps = ceil(
-        (num_combinations * hyperparameters.num_test_classes * 2)
-        / hyperparameters.batch_size
-    )*2
 
     # Prepare model save path
     model_save_path = Path("saved_models")
