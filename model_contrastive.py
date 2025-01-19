@@ -112,10 +112,12 @@ if __name__ == "__main__":
     ]
 
 
+    model_name = f"DOPPEL_Contrastive_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
     # Initialize Weights & Biases tracking if available
     try:
         wandb.init(
             project="DOPPEL",
+            name=model_name,
             config={
                 "epochs": hyperparameters.epochs if hasattr(hyperparameters, 'epochs') else 50,
                 "batch_size": hyperparameters.batch_size if hasattr(hyperparameters, 'batch_size') else 32,
@@ -143,7 +145,6 @@ if __name__ == "__main__":
     )
 
     # Save model and training history
-    model_name = f"DOPPEL_Contrastive_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
     siamese_model.save(model_save_path / model_name)
     with open(model_save_path / 'training_history_doppel.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
