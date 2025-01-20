@@ -2,6 +2,7 @@ import os
 import random
 from types import SimpleNamespace
 
+from six import advance_iterator
 from tqdm import tqdm
 import tarfile
 from operator import contains
@@ -36,10 +37,19 @@ def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
         num_classes = len(classes)
 
     finished_classes = 0
-    for class_name, images in tqdm(class_to_images.items(), desc="Processing classes"):
+    items = list(class_to_images.items())
+    random.shuffle(items)
+    for class_name, images in tqdm(items, desc="Processing classes"):
         if finished_classes == num_classes:
             break
         finished_classes += 1
+
+        if max_images == 1:
+            additional_pos = random.random() >= 0.5
+            additional_neg = not additional_pos
+        else:
+            additional_pos = False
+            additional_neg = False
 
         num_positive_pairs = 0
         # Generate positive pairs for multiple anchor and comparison images
@@ -47,7 +57,7 @@ def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
             #for base in range(min(len(images), len(images) if max_images == -1 else max_images)):
             base_image = random.choice(images)
             # Generate multiple
-            for comp in range(1, min(len(images), len(images) if max_images == -1 else max_images)):
+            for comp in range(1, min(len(images), len(images) if max_images == -1 else max_images + additional_pos)):
                 anchor.append(base_image)
                 comparison.append(images[comp])
                 labels.append(1)
@@ -57,8 +67,13 @@ def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
         other_classes = [cls for cls in classes if cls != class_name]
 
         # Produce as many negative pairs as positive pairs
-        for i in range(num_positive_pairs):
-            anchor.append(anchor[-num_positive_pairs + i])
+        for i in range(num_positive_pairs + additional_neg):
+            if additional_pos == 1:
+                break
+            if additional_neg == 1:
+                anchor.append(random.choice(images))
+            else:
+                anchor.append(anchor[-num_positive_pairs + i])
             comparison.append(random.choice(class_to_images[random.choice(other_classes)]))
             labels.append(0)
 
@@ -112,7 +127,7 @@ def create_tf_dataset(anchor, comparison, labels, image_size, batch_size):
 
 
 # Load data
-def load_data(data_dir, image_size, batch_size, num_classes, max_images):
+def load_vggface2_folder(data_dir, image_size, batch_size, num_classes, max_images):
     print(f"Loading data from {data_dir}...")
     extract_tar(data_dir, "data/tmp/VGG-Face2")
     if contains(data_dir, "train.tar"):
@@ -135,7 +150,7 @@ def load_data(data_dir, image_size, batch_size, num_classes, max_images):
 def get_vggface2_data(hyperparameters,
                       data_dir="data/VGG-Face2/data"):
     # Main script
-    train_dataset = load_data(
+    train_dataset = load_vggface2_folder(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "train.tar")][0]),
@@ -144,7 +159,7 @@ def get_vggface2_data(hyperparameters,
         hyperparameters.num_train_classes,
         hyperparameters.limit_images
     )
-    test_dataset = load_data(
+    test_dataset = load_vggface2_folder(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),
