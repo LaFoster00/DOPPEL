@@ -102,7 +102,7 @@ def save_training_history(history, model_save_path, model_name):
 @click.option('--limit_images', default=15, help='Limit image comparisons per person.')
 @click.option('--num_train_classes', default=-1, help='Number of training classes (Persons).')
 @click.option('--num_test_classes', default=-1, help='Number of test classes (Persons).')
-@click.option('--data_dir', default="data/VGG-Face2/data", help='Path to the VGG-Face2 dataset.', type=click.Path)
+@click.option('--data_dir', default="data/VGG-Face2/data", help='Path to the VGG-Face2 dataset.', type=click.Path())
 def train_model(epochs, batch_size, image_dim, learning_rate, limit_images, num_train_classes, num_test_classes, data_dir):
     hyperparameters = SimpleNamespace(
         epochs=epochs,

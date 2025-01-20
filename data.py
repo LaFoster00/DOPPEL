@@ -106,7 +106,7 @@ def create_tf_dataset(anchor, positive, negative, image_size, batch_size):
 
 
 # Load data
-def load_data(data_dir, image_size, batch_size, num_classes, max_images):
+def load_vggface2_folder(data_dir, image_size, batch_size, num_classes, max_images):
     print(f"Loading data from {data_dir}...")
     extract_tar(data_dir, "data/tmp/VGG-Face2")
     if contains(data_dir, "train.tar"):
@@ -129,7 +129,7 @@ def load_data(data_dir, image_size, batch_size, num_classes, max_images):
 def get_vggface2_data(hyperparameters,
                       data_dir="data/VGG-Face2/data"):
     # Main script
-    train_dataset = load_data(
+    train_dataset = load_vggface2_folder(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "train.tar")][0]),
@@ -138,7 +138,7 @@ def get_vggface2_data(hyperparameters,
         hyperparameters.num_train_classes,
         hyperparameters.limit_images
     )
-    test_dataset = load_data(
+    test_dataset = load_vggface2_folder(
         os.path.join(
             data_dir,
             [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),

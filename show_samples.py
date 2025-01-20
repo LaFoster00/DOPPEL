@@ -1,5 +1,6 @@
 from operator import contains
 from types import SimpleNamespace
+import click
 
 import keras
 import tqdm
@@ -10,9 +11,9 @@ from matplotlib import pyplot as plt
 from tensorflow import data
 import os
 from datetime import datetime
-from data import load_data, visualize
+from data import load_vggface2_folder, visualize
 
-def load_latest_model(model_dir):
+def load_latest_model(model_dir) -> models.Model:
     """
     Load the latest model from the specified directory based on the naming convention.
 
@@ -131,37 +132,43 @@ def plot_samples_with_predictions(model, dataset, num_samples, similarity_thresh
 
     plt.show()
 
-if __name__ == "__main__":
-    # Parameters
-    DATA_DIR = "data/VGG-Face2/data"
-    IMAGE_SIZE = (224, 224)
-    NUM_PAIRS = 4  # This now determines the total number of pairs to generate and plot
-    MODEL_PATH = "saved_models/"
-
-    # Convert to SimpleNamespace if needed
+@click.command()
+@click.option('--data_dir', default="data/VGG-Face2/data", help='Directory containing the dataset.', type=click.Path())
+@click.option('--image_size', default=(224, 224), help='Image dimensions.', type=(int, int))
+@click.option('--num_pairs', default=4, help='Number of pairs to generate and plot.')
+@click.option('--model_path', default="saved_models", help='Path to the saved models.', type=click.Path())
+@click.option('--epochs', default=50, help='Number of epochs.')
+@click.option('--batch_size', default=16, help='Batch size.')
+@click.option('--learning_rate', default=0.0001, help='Learning rate.')
+@click.option('--limit_images', default=15, help='Limit images.')
+@click.option('--num_train_classes', default=-1, help='Number of training classes.')
+@click.option('--num_test_classes', default=-1, help='Number of test classes.')
+def main(data_dir, image_size, num_pairs, model_path, epochs, batch_size, learning_rate, limit_images, num_train_classes, num_test_classes):
     hyperparameters = SimpleNamespace(
-        epochs=50,
-        batch_size=16,
-        image_dim=(224, 224),
-        learning_rate=0.0001,
-        limit_images=15,
-        num_train_classes=-1,
-        num_test_classes=-1,
+        epochs=epochs,
+        batch_size=batch_size,
+        image_dim=image_size,
+        learning_rate=learning_rate,
+        limit_images=limit_images,
+        num_train_classes=num_train_classes,
+        num_test_classes=num_test_classes,
     )
 
-    dataset = test_dataset = load_data(
+    dataset = load_vggface2_folder(
         os.path.join(
-            DATA_DIR,
-            [x for x in os.listdir(DATA_DIR) if contains(x, "test.tar")][0]),
+            data_dir,
+            [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),
         hyperparameters.image_dim,
         hyperparameters.batch_size,
         hyperparameters.num_test_classes,
         hyperparameters.limit_images
     )
 
-    # Load the model
-    model = load_latest_model(MODEL_PATH)
+    model = load_latest_model(model_path)
 
     similarity_threshold = predict_dataset(model, dataset, max_iterations=10)
-    dataset = dataset.unbatch().batch(NUM_PAIRS)
-    plot_samples_with_predictions(model, dataset, NUM_PAIRS, similarity_threshold)
+    dataset = dataset.unbatch().batch(num_pairs)
+    plot_samples_with_predictions(model, dataset, num_pairs, similarity_threshold)
+
+if __name__ == "__main__":
+    main()
