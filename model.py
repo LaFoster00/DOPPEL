@@ -1,206 +1,162 @@
 import csv
-
 import matplotlib.pyplot as plt
-import numpy as np
-import os
-import random
 import tensorflow as tf
 from pathlib import Path
-from keras import applications
-from keras import layers
-from keras import losses
-from keras import ops
-from keras import optimizers
-from keras import metrics
-from keras import Model
-from keras import applications
 import keras
-import sys
-sys.modules["tensorflow.keras"] = keras
-import wandb
-from wandb.integration.keras import WandbMetricsLogger
+from keras import applications, layers, Model, optimizers, metrics, callbacks, regularizers
 from types import SimpleNamespace
-
 import data
+from math import comb, floor, ceil
+import wandb
+import sys
+from datetime import datetime
 
-# Convert to SimpleNamespace if needed
-hyperparameters = SimpleNamespace(
-    epochs=10,
-    batch_size=32,
-    image_dim=(224, 224),
-    learning_rate=0.0001,
-    num_train_classes=1000,
-    num_test_classes=200
-)
+sys.modules["tensorflow.keras"] = keras
+from wandb.integration.keras import WandbMetricsLogger
+from keras import saving
 
-# Save information
-model_save_path = Path("saved_models")
-model_save_path.mkdir(parents=True, exist_ok=True)
+@saving.register_keras_serializable(package='MyPackage')
+def euclidean_distance(vectors):
+    (a, b) = vectors
+    sum_squared = keras.ops.sum(keras.ops.square(a - b), axis=1,
+                                       keepdims=True)
+    return keras.ops.sqrt(keras.ops.maximum(sum_squared, keras.backend.epsilon()))
 
-train_dataset, test_dataset = data.get_vggface2_data(hyperparameters = hyperparameters,
-                                                     num_train_classes=hyperparameters.num_train_classes,
-                                                     num_test_classes=hyperparameters.num_test_classes)
+def  get_contrastive_loss(margin):
+    def contrastive_loss(y_true, y_pred):
+        squared_distance = tf.square(y_pred)
+        # Compute contrastive loss
+        loss = (1 - y_true) * 0.5 * squared_distance + y_true * 0.5 * tf.maximum(0.0, margin - y_pred) ** 2
+        return tf.reduce_mean(loss)
+    return contrastive_loss
 
-base_cnn = applications.resnet.ResNet50(
-    weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
-)
+if __name__ == "__main__":
+    # Define hyperparameters
+    hyperparameters = SimpleNamespace(
+        epochs=50,
+        batch_size=32,
+        image_dim=(224, 224),
+        learning_rate=0.0001,
+        limit_images=15,
+        num_train_classes=-1,
+        num_test_classes=-1,
+        trainable_layers=20,
+        dropout_rate = 0.5,
+        margin = 1.0
+    )
 
-flatten = layers.Flatten()(base_cnn.output)
-dense1 = layers.Dense(512, activation="relu")(flatten)
-dense1 = layers.BatchNormalization()(dense1)
-dense2 = layers.Dense(256, activation="relu")(dense1)
-dense2 = layers.BatchNormalization()(dense2)
-output = layers.Dense(256)(dense2)
+    # Prepare model save path
+    model_save_path = Path("saved_models")
+    model_save_path.mkdir(parents=True, exist_ok=True)
 
-embedding = Model(base_cnn.input, output, name="Embedding")
+    # Load datasets
+    #train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
+    train_dataset, test_dataset = data.get_vggface2_data(hyperparameters)
 
-trainable = False
-for layer in base_cnn.layers:
-    if layer.name == "conv5_block1_out":
-        trainable = True
-    layer.trainable = trainable
+    # Create Siamese Network
+    image_1_input = layers.Input(name="image_1", shape=hyperparameters.image_dim + (3,))
 
-class DistanceLayer(layers.Layer):
-    """
-    This layer is responsible for computing the distance between the anchor
-    embedding and the positive embedding, and the anchor embedding and the
-    negative embedding.
-    """
+    image_2_input = layers.Input(name="image_2", shape=hyperparameters.image_dim + (3,))
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    # Define base CNN for embeddings
+    base_cnn = applications.ResNet50(
+        weights="imagenet", input_shape=hyperparameters.image_dim + (3,), include_top=False
+    )
 
-    def call(self, anchor, positive, negative):
-        ap_distance = ops.sum(tf.square(anchor - positive), -1)
-        an_distance = ops.sum(tf.square(anchor - negative), -1)
-        return (ap_distance, an_distance)
+    # Make only the last few layers trainable
+    trainable_layers = hyperparameters.trainable_layers  # Adjust the number of layers you want to train
+    trainable = False
+    for layer in base_cnn.layers:
+        if layer.name == "conv5_block1_out":
+            trainable = True
+        layer.trainable = trainable
 
 
-anchor_input = layers.Input(name="anchor", shape=hyperparameters.image_dim + (3,))
-positive_input = layers.Input(name="positive", shape=hyperparameters.image_dim + (3,))
-negative_input = layers.Input(name="negative", shape=hyperparameters.image_dim + (3,))
+    flatten = layers.GlobalAveragePooling2D()(base_cnn.output)
+    dropout1 = layers.Dropout(hyperparameters.dropout_rate)(flatten)
+    # Add L2 regularization
+    dense1 = layers.Dense(
+        1024,
+        activation='relu',
+        kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+    )(dropout1)
+    dropout2 = layers.Dropout(hyperparameters.dropout_rate)(dense1)
+    output = layers.Dense(
+        512,
+        activation='relu',
+        kernel_regularizer=regularizers.l2(0.01)  # L2 regularization factor = 0.01
+    )(dropout1)
+    embedding = Model(base_cnn.input, output, name="Embedding")
 
-distances = DistanceLayer()(
-    embedding(applications.resnet.preprocess_input(anchor_input)),
-    embedding(applications.resnet.preprocess_input(positive_input)),
-    embedding(applications.resnet.preprocess_input(negative_input)),
-)
+    embedding_1 = embedding(image_1_input)
+    embedding_2 = embedding(image_2_input)
 
-siamese_network = Model(
-    inputs=[anchor_input, positive_input, negative_input], outputs=distances
-)
+    distance = layers.Lambda(euclidean_distance, name='dist', output_shape=(1,))([embedding_1, embedding_2])
 
-class SiameseModel(Model):
-    """The Siamese Network model with a custom training and testing loops.
+    output = layers.Dense(1, activation='sigmoid')(distance)
 
-    Computes the triplet loss using the three embeddings produced by the
-    Siamese Network.
+    siamese_model = Model(inputs=[image_1_input, image_2_input], outputs=output, name="SiameseNetwork")
 
-    The triplet loss is defined as:
-       L(A, P, N) = max(‖f(A) - f(P)‖² - ‖f(A) - f(N)‖² + margin, 0)
-    """
+    # Compile and summarize the model
+    siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate), loss=get_contrastive_loss(hyperparameters.margin), metrics=["accuracy"])
+    siamese_model.summary()
 
-    def __init__(self, siamese_network, margin=0.5):
-        super().__init__()
-        self.siamese_network = siamese_network
-        self.margin = margin
-        self.loss_tracker = metrics.Mean(name="loss")
-
-    def call(self, inputs):
-        return self.siamese_network(inputs)
-
-    def train_step(self, data):
-        # GradientTape is a context manager that records every operation that
-        # you do inside. We are using it here to compute the loss so we can get
-        # the gradients and apply them using the optimizer specified in
-        # `compile()`.
-        with tf.GradientTape() as tape:
-            loss = self._compute_loss(data)
-
-        # Storing the gradients of the loss function with respect to the
-        # weights/parameters.
-        gradients = tape.gradient(loss, self.siamese_network.trainable_weights)
-
-        # Applying the gradients on the model using the specified optimizer
-        self.optimizer.apply_gradients(
-            zip(gradients, self.siamese_network.trainable_weights)
+    # Define callbacks for training
+    model_callbacks = [
+        callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=5,       # Increased patience to allow more epochs before stopping
+            restore_best_weights=True,
         )
+    ]
 
-        # Let's update and return the training loss metric.
-        self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
 
-    def test_step(self, data):
-        loss = self._compute_loss(data)
+    model_name = f"DOPPEL_Contrastive_Embedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.keras"
+    # Initialize Weights & Biases tracking if available
+    try:
+        wandb.init(
+            project="DOPPEL",
+            name=model_name,
+            config={
+                "epochs": hyperparameters.epochs if hasattr(hyperparameters, 'epochs') else 50,
+                "batch_size": hyperparameters.batch_size if hasattr(hyperparameters, 'batch_size') else 32,
+                "dropout": hyperparameters.dropout_rate if hasattr(hyperparameters, 'dropout_rate') else 0.5,
+                "num_train_classes": hyperparameters.num_train_classes if hasattr(hyperparameters, 'num_train_classes') else 100,
+                "num_val_classes": hyperparameters.num_val_classes if hasattr(hyperparameters, 'num_val_classes') else 20,
+                "input_image_size": hyperparameters.input_image_size if hasattr(hyperparameters, 'input_image_size') else (224, 224),
+                "limit_images": hyperparameters.limit_images,
+                "type":"contrastive",
+                "trainable_layers": hyperparameters.trainable_layers,
+                "dropout_rate": hyperparameters.dropout_rate,
+                "margin": hyperparameters.margin
+            })
+        model_callbacks.append(WandbMetricsLogger())
+    except Exception as e:
+        print(f"No wandb callback added. Error: {e}")
 
-        # Let's update and return the loss metric.
-        self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
 
-    def _compute_loss(self, data):
-        # The output of the network is a tuple containing the distances
-        # between the anchor and the positive example, and the anchor and
-        # the negative example.
-        ap_distance, an_distance = self.siamese_network(data)
+    # Train the model
+    history = siamese_model.fit(
+        train_dataset,
+        epochs=hyperparameters.epochs,
+        validation_data=test_dataset,
+        callbacks=model_callbacks
+    )
 
-        # Computing the Triplet Loss by subtracting both distances and
-        # making sure we don't get a negative value.
-        loss = ap_distance - an_distance
-        loss = tf.maximum(loss + self.margin, 0.0)
-        return loss
+    # Save model and training history
+    siamese_model.save(model_save_path / model_name)
+    with open(model_save_path / 'training_history_doppel.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(history.history.keys())
+        writer.writerows(zip(*history.history.values()))
 
-    @property
-    def metrics(self):
-        # We need to list our metrics here so the `reset_states()` can be
-        # called automatically.
-        return [self.loss_tracker]
-
-siamese_model = SiameseModel(siamese_network)
-siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate))
-siamese_model.summary(expand_nested=True, show_trainable=True)
-
-model_callbacks = []
-
-try:
-    wandb.init(
-        project="DOPPEL",
-        config={
-            "epochs": hyperparameters.epochs,
-            "batch_size": hyperparameters.batch_size,
-            "learning_rate": hyperparameters.learning_rate,
-            "image_dim": hyperparameters.image_dim,
-        })
-    model_callbacks.append(WandbMetricsLogger())
-except Exception as e:
-    print(f"No wandb callback added. {e}")
-
-history = siamese_model.fit(train_dataset,
-                  epochs=10,
-                  validation_data=test_dataset,
-                  callbacks=model_callbacks)
-
-embedding.save(model_save_path / "DOPPEL_Embedding.keras")
-with open(model_save_path / 'training_history_doppel.csv', mode='w', newline='') as file:
-    writer = csv.writer(file)
-    # Write header
-    writer.writerow(history.history.keys())
-    # Write data
-    writer.writerows(zip(*history.history.values()))
-
-sample = next(iter(train_dataset))
-data.visualize(*sample)
-
-anchor, positive, negative = sample
-anchor_embedding, positive_embedding, negative_embedding = (
-    embedding(applications.resnet.preprocess_input(anchor)),
-    embedding(applications.resnet.preprocess_input(positive)),
-    embedding(applications.resnet.preprocess_input(negative)),
-)
-
-cosine_similarity = metrics.CosineSimilarity()
-
-positive_similarity = cosine_similarity(anchor_embedding, positive_embedding)
-print("Positive similarity:", positive_similarity.numpy())
-
-negative_similarity = cosine_similarity(anchor_embedding, negative_embedding)
-print("Negative similarity", negative_similarity.numpy())
+    # Evaluate and visualize results
+    sample = next(iter(train_dataset))
+    data.visualize(train_dataset)
+    (image_1, image_2), _ = sample
+    embedding_1, embedding_2 = (
+        embedding(image_1),
+        embedding(image_2)
+    )
+    cosine_similarity = metrics.CosineSimilarity()
+    print("Cosine Similarity:", cosine_similarity(embedding_1, embedding_2).numpy())

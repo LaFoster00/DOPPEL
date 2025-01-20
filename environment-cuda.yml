@@ -16,3 +16,4 @@ dependencies:
   - scikit-learn # For additional machine learning tools
   - wandb=0.19.1 # For logging experiments
   - tqdm
+  - scipy=1.11.3
