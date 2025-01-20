@@ -6,7 +6,6 @@ import keras
 from keras import applications, layers, Model, optimizers, metrics, callbacks, regularizers
 from types import SimpleNamespace
 import data
-import fast_data
 from math import comb, floor, ceil
 import wandb
 import sys
@@ -52,7 +51,7 @@ if __name__ == "__main__":
 
     # Load datasets
     #train_dataset, test_dataset = data.load_data_for_contrastive_loss(hyperparameters=hyperparameters, limit_images=hyperparameters.limit_images, num_test_classes=hyperparameters.num_test_classes, num_train_classes=hyperparameters.num_train_classes)
-    train_dataset, test_dataset = fast_data.get_vggface2_data(hyperparameters)
+    train_dataset, test_dataset = data.get_vggface2_data(hyperparameters)
 
     # Create Siamese Network
     image_1_input = layers.Input(name="image_1", shape=hyperparameters.image_dim + (3,))

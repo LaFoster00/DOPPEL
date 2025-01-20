@@ -4,156 +4,157 @@ from types import SimpleNamespace
 
 from tqdm import tqdm
 import tarfile
+from operator import contains
 import matplotlib.pyplot as plt
+import numpy as np
+
 import tensorflow as tf
 
-def extract_tar(tar_path, extract_dir):
-    if "train.tar" in tar_path:
-        data_type = "train"
-    else:
-        data_type = "test"
 
-    if not os.path.exists(os.path.join(extract_dir, data_type)):
-        print(f"Extracting {data_type} data...")
+def extract_tar(tar_path, extract_dir):
+    if contains(tar_path, "train.tar"):
+        type = "train"
+    else:
+        type = "test"
+
+    if not os.path.exists(os.path.join(extract_dir, type)):
+        print(f"Extracting {type} data...")
         os.makedirs(extract_dir, exist_ok=True)
         with tarfile.open(tar_path, "r:gz") as tar:
             tar.extractall(path=extract_dir)
 
-# Lazy image pair generator for contrastive loss
-def pair_generator(class_to_images, image_size):
-    """
-    Generator for creating strictly balanced similar and dissimilar pairs.
-    """
-    for class_name, images in class_to_images.items():
-        if len(images) > 1:
-            for i in range(len(images)):
-                for j in range(i + 1, len(images)):
-                    # Generate a similar pair (label=1)
-                    image_1 = load_image(images[i], image_size)
-                    image_2 = load_image(images[j], image_size)
-                    yield image_1, image_2, 0
-                    
-                    # Generate a dissimilar pair (label=0)
-                    random_class = random.choice([cls for cls in class_to_images if cls != class_name])
-                    random_image = random.choice(class_to_images[random_class])
-                    image_1 = load_image(images[i], image_size)
-                    image_2 = load_image(random_image, image_size)
-                    yield image_1, image_2, 1
+# Generate image pairs
+def generate_pairs(class_to_images, num_classes=-1, max_images=-1):
+    print("Generating image pairs...")
+    anchor = []
+    comparison = []
+    labels = []
 
+    classes = list(class_to_images.keys())
+
+    if num_classes == -1:
+        num_classes = len(classes)
+
+    finished_classes = 0
+    for class_name, images in tqdm(class_to_images.items(), desc="Processing classes"):
+        if finished_classes == num_classes:
+            break
+        finished_classes += 1
+
+        num_positive_pairs = 0
+        # Generate positive pairs for multiple anchor and comparison images
+        if len(images) > 0:
+            #for base in range(min(len(images), len(images) if max_images == -1 else max_images)):
+            base_image = random.choice(images)
+            # Generate multiple
+            for comp in range(1, min(len(images), len(images) if max_images == -1 else max_images)):
+                anchor.append(base_image)
+                comparison.append(images[comp])
+                labels.append(1)
+                num_positive_pairs += 1
+
+        # Generate negative pairs
+        other_classes = [cls for cls in classes if cls != class_name]
+
+        # Produce as many negative pairs as positive pairs
+        for i in range(num_positive_pairs):
+            anchor.append(anchor[-num_positive_pairs + i])
+            comparison.append(random.choice(class_to_images[random.choice(other_classes)]))
+            labels.append(0)
+
+    return anchor, comparison, labels
+
+
+# Load and preprocess a pair of images lazily
 def load_image(image_path, image_size, augment=True):
-    """Load and preprocess an image with optional augmentation."""
     image = tf.io.read_file(image_path)
-    image = tf.image.decode_jpeg(image, channels=3)
+    # Decode image
+    image = tf.cond(
+        tf.image.is_jpeg(image),
+        lambda: tf.image.decode_jpeg(contents=image, channels=3),
+        lambda: tf.image.decode_png(contents=image, channels=3))
     image = tf.image.resize(image, image_size)
     image = image / 255.0  # Normalize to [0, 1]
-    
+
     if augment:
         image = tf.image.random_flip_left_right(image)  # Random horizontal flip
         image = tf.image.random_brightness(image, max_delta=0.2)  # Random brightness adjustment
         image = tf.image.random_contrast(image, lower=0.8, upper=1.2)  # Random contrast adjustment
         image = tf.image.random_saturation(image, lower=0.8, upper=1.2)  # Random saturation adjustment
-    
+
+    image = tf.clip_by_value(image, 0, 1)
+    # image = image * 255.0
+    # image = image - 127.5
+    # image = tf.cast(image, tf.uint8)
+
     return image
 
 
-def create_tf_pair_dataset(generator_fn, image_size, batch_size):
-    """Create TensorFlow dataset for contrastive loss using a generator."""
-    dataset = tf.data.Dataset.from_generator(
-        generator_fn,
-        output_signature=(
-            tf.TensorSpec(shape=(image_size[0], image_size[1], 3), dtype=tf.float32),
-            tf.TensorSpec(shape=(image_size[0], image_size[1], 3), dtype=tf.float32),
-            tf.TensorSpec(shape=(), dtype=tf.int32),  # Labels are integer
-        ),
-    )
-    dataset = dataset.shuffle(buffer_size=128)  # Adjust for memory constraints
+def load_pair(base, comp, flag, image_size):
+    return (load_image(base, image_size), load_image(comp, image_size)), flag
+
+
+# Prepare TensorFlow dataset
+def create_tf_dataset(anchor, comparison, labels, image_size, batch_size):
+    anchor_dataset = tf.data.Dataset.from_tensor_slices(anchor)
+    comparison_dataset = tf.data.Dataset.from_tensor_slices(comparison)
+    label_dataset = tf.data.Dataset.from_tensor_slices(labels)
+
+    dataset = tf.data.Dataset.zip((anchor_dataset, comparison_dataset, label_dataset))
+    dataset = dataset.shuffle(buffer_size=1024 * 8)
+    dataset = dataset.map(
+        lambda anchor_path, comparison_path, flag: load_pair(anchor_path, comparison_path, flag, image_size),
+        num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=False)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
+
     return dataset
 
-import os
 
-def load_data_for_contrastive_loss(data_dir="data/VGG-Face2/data", 
-                                   hyperparameters=None, 
-                                   limit_images=None, 
-                                   num_train_classes=None, 
-                                   num_test_classes=None):
-    """
-    Load the data for contrastive loss efficiently.
-    
-    Parameters:
-        data_dir (str): Directory containing the data.
-        hyperparameters: Hyperparameters for the data loading process.
-        limit_images (int, optional): Maximum number of images to load per class.
-        num_train_classes (int, optional): Number of training classes.
-        num_test_classes (int, optional): Number of test classes.
-        
-    Returns:
-        train_dataset: TensorFlow dataset for training.
-        test_dataset: TensorFlow dataset for testing.
-        num_train_classes: Number of training classes.
-        num_test_classes: Number of test classes.
-    """
-    if hyperparameters is None:
-        raise ValueError("Hyperparameters must be provided.")
-
-    image_size = getattr(hyperparameters, "image_dim", (224, 224))
-    batch_size = getattr(hyperparameters, "batch_size", 32)
-
-    print(f"Loading data from {data_dir} for contrastive loss...")
+# Load data
+def load_data(data_dir, image_size, batch_size, num_classes, max_images):
+    print(f"Loading data from {data_dir}...")
     extract_tar(data_dir, "data/tmp/VGG-Face2")
+    if contains(data_dir, "train.tar"):
+        data_dir = "data/tmp/VGG-Face2/train"
+    else:
+        data_dir = "data/tmp/VGG-Face2/test"
+    classes = os.listdir(data_dir)
+    class_to_images = {}
 
-    # Define the paths for train and test datasets
-    train_data_dir = "data/tmp/VGG-Face2/train"
-    test_data_dir = "data/tmp/VGG-Face2/test"
-
-    # Initialize dictionaries to hold class-to-images mappings
-    train_class_to_images = {}
-    test_class_to_images = {}
-
-    # Collect images per class for training dataset
-    all_train_classes = os.listdir(train_data_dir)
-    if num_train_classes:
-        all_train_classes = all_train_classes[:num_train_classes]  # Limit to num_train_classes
-    for class_name in all_train_classes:
-        class_path = os.path.join(train_data_dir, class_name)
+    for class_name in classes:
+        class_path = os.path.join(data_dir, class_name)
         if os.path.isdir(class_path):
-            images = [
-                os.path.join(class_path, img)
-                for img in os.listdir(class_path)
-                if img.endswith(".jpg")
-            ]
-            train_class_to_images[class_name] = images[:limit_images] if limit_images else images
+            images = [os.path.join(class_path, img) for img in os.listdir(class_path) if img.endswith(".jpg")]
+            class_to_images[class_name] = images
 
-    # Collect images per class for testing dataset
-    all_test_classes = os.listdir(test_data_dir)
-    if num_test_classes:
-        all_test_classes = all_test_classes[:num_test_classes]  # Limit to num_test_classes
-    for class_name in all_test_classes:
-        class_path = os.path.join(test_data_dir, class_name)
-        if os.path.isdir(class_path):
-            images = [
-                os.path.join(class_path, img)
-                for img in os.listdir(class_path)
-                if img.endswith(".jpg")
-            ]
-            test_class_to_images[class_name] = images[:limit_images] if limit_images else images
+    anchor_images, comparison_images, labels = generate_pairs(class_to_images, num_classes, max_images)
+    return create_tf_dataset(anchor_images, comparison_images, labels, image_size, batch_size)
 
-    # Calculate the number of classes
-    num_train_classes = len(train_class_to_images)
-    num_test_classes = len(test_class_to_images)
 
-    # Create datasets lazily
-    train_dataset = create_tf_pair_dataset(
-        lambda: pair_generator(train_class_to_images, image_size),
-        image_size,
-        batch_size,
+def get_vggface2_data(hyperparameters,
+                      data_dir="data/VGG-Face2/data"):
+    # Main script
+    train_dataset = load_data(
+        os.path.join(
+            data_dir,
+            [x for x in os.listdir(data_dir) if contains(x, "train.tar")][0]),
+        hyperparameters.image_dim,
+        hyperparameters.batch_size,
+        hyperparameters.num_train_classes,
+        hyperparameters.limit_images
     )
-    test_dataset = create_tf_pair_dataset(
-        lambda: pair_generator(test_class_to_images, image_size),
-        image_size,
-        batch_size,
+    test_dataset = load_data(
+        os.path.join(
+            data_dir,
+            [x for x in os.listdir(data_dir) if contains(x, "test.tar")][0]),
+        hyperparameters.image_dim,
+        hyperparameters.batch_size,
+        hyperparameters.num_test_classes,
+        hyperparameters.limit_images
     )
+
+    print("Training and testing datasets are ready for Siamese network training.")
 
     return train_dataset, test_dataset
 
@@ -175,13 +176,21 @@ def visualize(dataset):
     os.makedirs("plots", exist_ok=True)
     plt.savefig('plots/sample.png')
 
+
 if __name__ == "__main__":
+    # Convert to SimpleNamespace if needed
     hyperparameters = SimpleNamespace(
-        epochs=10,
-        batch_size=32,
+        epochs=50,
+        batch_size=16,
         image_dim=(224, 224),
-        learning_rate=0.0003,
+        learning_rate=0.0001,
+        limit_images=5,
+        num_train_classes=1000,
+        num_test_classes=200,
+        trainable_layers=20,
+        dropout_rate=0.5,
+        margin=1.0
     )
-    train_dataset, test_dataset = load_data_for_contrastive_loss(hyperparameters=hyperparameters)
+    train_dataset, test_dataset = get_vggface2_data(hyperparameters)
     visualize(train_dataset)
     print("Done")

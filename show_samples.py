@@ -3,7 +3,7 @@ import random
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import models
-from model_contrastive import euclidean_distance, get_contrastive_loss
+from model import euclidean_distance, get_contrastive_loss
 from datetime import datetime
 
 def load_latest_model(model_dir):
