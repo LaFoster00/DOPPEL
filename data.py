@@ -36,10 +36,16 @@ def generate_triplet(class_to_images, num_classes=-1, max_images=-1):
         num_classes = len(classes)
 
     finished_classes = 0
-    for class_name, images in tqdm(class_to_images.items(), desc="Processing classes"):
+    items = list(class_to_images.items())
+    random.shuffle(items)
+    for class_name, images in tqdm(items, desc="Processing classes"):
         if finished_classes == num_classes:
             break
         finished_classes += 1
+
+        # If only one image is requested we still have to iterate up to 2 since we start at 1 for the positive pair
+        if max_images == 1:
+            max_images = 2
 
         num_positive_pairs = 0
         # Generate positive pairs for multiple anchor and comparison images

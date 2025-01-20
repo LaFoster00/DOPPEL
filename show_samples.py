@@ -137,21 +137,12 @@ def plot_samples_with_predictions(model, dataset, num_samples, similarity_thresh
 @click.option('--image_size', default=(224, 224), help='Image dimensions.', type=(int, int))
 @click.option('--num_pairs', default=4, help='Number of pairs to generate and plot.')
 @click.option('--model_path', default="saved_models", help='Path to the saved models.', type=click.Path())
-@click.option('--epochs', default=50, help='Number of epochs.')
-@click.option('--batch_size', default=16, help='Batch size.')
-@click.option('--learning_rate', default=0.0001, help='Learning rate.')
-@click.option('--limit_images', default=15, help='Limit image comparisons per person.')
-@click.option('--num_train_classes', default=-1, help='Number of training classes (Persons).')
-@click.option('--num_test_classes', default=-1, help='Number of test classes (Persons).')
-def main(data_dir, image_size, num_pairs, model_path, epochs, batch_size, learning_rate, limit_images, num_train_classes, num_test_classes):
+def main(data_dir, image_size, num_pairs, model_path):
     hyperparameters = SimpleNamespace(
-        epochs=epochs,
-        batch_size=batch_size,
         image_dim=image_size,
-        learning_rate=learning_rate,
-        limit_images=limit_images,
-        num_train_classes=num_train_classes,
-        num_test_classes=num_test_classes,
+        batch_size=num_pairs,
+        num_test_classes=num_pairs,
+        limit_images=1,
     )
 
     dataset = load_vggface2_folder(

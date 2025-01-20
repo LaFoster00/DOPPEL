@@ -37,23 +37,18 @@ Options:
 ## Inference
 Make sure you activated the 'DOPPEL' conda environment
 
-To evaluate pictures of persons and plot the result, execute the following command:
+To evaluate pictures of ramdom persons (from the vggface2 test dataset) and plot the result, execute the following command:
 ``` bash
 python show_samples.py
 ```
 ```
 Options:
   --data_dir PATH                 Directory containing the dataset. Test will
-                                  be loaded automatically.
+                                  be loaded automatically. (data/VGG-Face2/data)
   --image_size <INTEGER INTEGER>...
-                                  Image dimensions.
-  --num_pairs INTEGER             Number of pairs to generate and plot.
-  --model_path PATH               Path to the saved models.
-  --epochs INTEGER                Number of epochs.
-  --batch_size INTEGER            Batch size.
-  --learning_rate FLOAT           Learning rate.
-  --limit_images INTEGER          Limit image comparisons per person.
-  --num_train_classes INTEGER     Number of training classes (Persons).
-  --num_test_classes INTEGER      Number of test classes (Persons).
+                                  Image dimensions. (224, 224)
+  --num_pairs INTEGER             Number of pairs to generate and plot. (4)
+  --model_path PATH               Path to the saved models. (saved_models)
   --help                          Show this message and exit.
+
 ```
