@@ -117,7 +117,6 @@ if __name__ == "__main__":
         wandb.init(
             project="DOPPEL",
             name=model_name,
-            group="Contrastive",
             config={
                 "epochs": hyperparameters.epochs if hasattr(hyperparameters, 'epochs') else 50,
                 "batch_size": hyperparameters.batch_size if hasattr(hyperparameters, 'batch_size') else 32,
