@@ -99,10 +99,11 @@ def save_training_history(history, model_save_path, model_name):
 @click.option('--batch_size', default=16, help='Batch size.')
 @click.option('--image_dim', default=(224, 224), help='Image dimensions.', type=(int, int))
 @click.option('--learning_rate', default=0.0001, help='Learning rate.')
-@click.option('--limit_images', default=15, help='Limit images.')
-@click.option('--num_train_classes', default=-1, help='Number of training classes.')
-@click.option('--num_test_classes', default=-1, help='Number of test classes.')
-def train_model(epochs, batch_size, image_dim, learning_rate, limit_images, num_train_classes, num_test_classes):
+@click.option('--limit_images', default=15, help='Limit image comparisons per person.')
+@click.option('--num_train_classes', default=-1, help='Number of training classes (Persons).')
+@click.option('--num_test_classes', default=-1, help='Number of test classes (Persons).')
+@click.option('--data_dir', default="data/VGG-Face2/data", help='Path to the VGG-Face2 dataset.', type=click.Path)
+def train_model(epochs, batch_size, image_dim, learning_rate, limit_images, num_train_classes, num_test_classes, data_dir):
     hyperparameters = SimpleNamespace(
         epochs=epochs,
         batch_size=batch_size,
@@ -116,7 +117,7 @@ def train_model(epochs, batch_size, image_dim, learning_rate, limit_images, num_
     model_save_path = Path("saved_models")
     model_save_path.mkdir(parents=True, exist_ok=True)
 
-    train_dataset, test_dataset = data.get_vggface2_data(hyperparameters=hyperparameters)
+    train_dataset, test_dataset = data.get_vggface2_data(hyperparameters=hyperparameters, data_dir=data_dir)
 
     embedding = build_embedding_model(hyperparameters.image_dim)
     set_trainable_layers(embedding)
