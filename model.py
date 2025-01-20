@@ -2,7 +2,7 @@ import csv
 
 import tensorflow as tf
 from pathlib import Path
-from keras import layers, ops, optimizers, metrics, Model, applications, callbacks
+from keras import layers, ops, optimizers, metrics, Model, applications, callbacks, utils
 import keras
 import sys
 # Wandb imports tensorflow.keras, so we need to replace it with keras in cases where tensorflow.keres doesnt exist
@@ -126,6 +126,8 @@ if __name__ == "__main__":
 
     embedding = Model(base_cnn.input, output, name="Embedding")
 
+    utils.plot_model(embedding, to_file="plots/embedding.png", show_shapes=True)
+
     trainable = False
     for layer in base_cnn.layers:
         if layer.name == "conv5_block1_out":
@@ -145,6 +147,8 @@ if __name__ == "__main__":
     siamese_network = Model(
         inputs=[anchor_input, positive_input, negative_input], outputs=distances
     )
+
+    utils.plot_model(siamese_network, to_file="plots/siamese_network.png", show_shapes=False)
 
     siamese_model = SiameseModel(siamese_network)
     siamese_model.compile(optimizer=optimizers.Adam(hyperparameters.learning_rate))
