@@ -174,7 +174,7 @@ def visualize(dataset):
 
     plt.tight_layout()
     os.makedirs("plots", exist_ok=True)
-    plt.savefig('plots/sample.png')
+    plt.show()
 
 
 if __name__ == "__main__":

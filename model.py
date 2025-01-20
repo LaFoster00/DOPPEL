@@ -42,7 +42,7 @@ if __name__ == "__main__":
         num_test_classes=-1,
         trainable_layers=20,
         dropout_rate = 0.5,
-        margin = 0.5
+        margin = 2.0
     )
 
     # Prepare model save path
